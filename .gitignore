@@ -6,3 +6,4 @@ dist/
 *.wsdl
 *.wso
 *.xsd
+.idea/

@@ -16,12 +16,34 @@ export type DefinitionProperty =
           description?: string;
           /**
            * This definition only reference another definition instead of primitive type
-           * @description helps to avoid circular referencies
+           * @description helps to avoid circular references
            */
           kind: "REFERENCE";
           isArray?: boolean;
           ref: Definition;
       };
+
+export type DefinitionAttribute =
+    | {
+          name: string;
+          sourceName: string;
+          kind: "PRIMITIVE";
+          type: string;
+          use?: DefinitionAttributeUse;
+      }
+    | {
+          name: string;
+          sourceName: string;
+          /**
+           * This definition only reference another definition instead of primitive type
+           * @description helps to avoid circular references
+           */
+          kind: "REFERENCE";
+          ref: Definition;
+          use?: DefinitionAttributeUse;
+      };
+
+type DefinitionAttributeUse = "optional" | "prohibited" | "required";
 
 export interface Definition {
     /** Will be used as name of generated Definition's interface */
@@ -29,8 +51,10 @@ export interface Definition {
     /** Original name of Definition in WSDL */
     sourceName: string;
     description?: string;
+    optional: boolean;
     docs: string[];
     properties: Array<DefinitionProperty>;
+    attributes: Array<DefinitionAttribute>;
 }
 
 export interface Method {
