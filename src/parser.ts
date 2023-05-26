@@ -280,6 +280,7 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                     // Parse ComplexTypes
                     for (const [name, complexType] of Object.entries(schemaElement.complexTypes)) {
                         const definition = parseComplexType(parsedWsdl, mergedOptions, name, complexType, nameSpace);
+                        parsedWsdl.definitions.push(definition);
                     }
 
                     // Parse SimpleTypes
@@ -316,17 +317,23 @@ function parseComplexType(
         const element = parseElement(child);
         if (element) {
             if (element.properties) {
-                definition.properties.push(...definition.properties);
+                for (const property of element.properties) {
+                    definition.properties.push(property);
+                }
             }
             if (element.attribute) {
                 definition.attributes.push(element.attribute);
             }
 
             if (element.extension?.properties) {
-                definition.properties.push(...element.extension.properties);
+                for (const property of element.extension.properties) {
+                    definition.properties.push(property);
+                }
             }
             if (element.extension?.attributes) {
-                definition.attributes.push(...element.extension.attributes);
+                for (const attribute of element.extension.attributes) {
+                    definition.attributes.push(attribute);
+                }
             }
         }
     });
