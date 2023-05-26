@@ -37,10 +37,14 @@ function addSafeImport(
 
     if (importDeclaration) {
         // ImportDeclaration already exists
+        /**
+         * TODO: its is not an array of strings but array of objects: [{ name: namedImport }]
+         */
+
         if (Array.isArray(importDeclaration.namedImports)) {
-            const namedImports = importDeclaration.namedImports as Array<string>;
-            if (namedImports.indexOf(namedImport) == -1) {
-                // namedImports does not exist, so let's add it
+            const namedImports = importDeclaration.namedImports as Array<any>;
+            if (!namedImports.find((imp) => imp.name == namedImport)) {
+                // namedImport does not exist yet, so let's add it
                 namedImports.push(namedImport);
             }
         }
@@ -77,20 +81,6 @@ function createProperty(
         docs: doc ? [doc] : undefined,
         hasQuestionToken: optional,
         type: isArray ? `Array<${type}>` : type,
-    };
-}
-
-function createAttributeProperty(
-    attributes: DefinitionAttribute[],
-    imports: OptionalKind<ImportDeclarationStructure>[],
-    doc?: string
-): PropertySignatureStructure {
-    return {
-        kind: StructureKind.PropertySignature,
-        name: "attributes",
-        docs: doc ? [doc] : undefined,
-        hasQuestionToken: false,
-        type: "{ foo: string, bar: number }",
     };
 }
 
@@ -163,8 +153,8 @@ function generateDefinitionFile(
 
     if (definition.attributes.length > 0) {
         const attributesName = `${defName}Attributes`;
-        definitionProperties.push(createProperty("attributes", attributesName, false, attributesName, false));
-        generateAttributesDefinition(defFile, definitionImports, attributesName, definition.attributes);
+        definitionProperties.push(createProperty("attributes", attributesName, false, undefined, false));
+        createAttributesDefinition(defFile, definitionImports, attributesName, definition.attributes);
     }
 
     defFile.addImportDeclarations(definitionImports);
@@ -182,7 +172,7 @@ function generateDefinitionFile(
     defFile.saveSync();
 }
 
-function generateAttributesDefinition(
+function createAttributesDefinition(
     sourceFile: SourceFile,
     definitionImports: OptionalKind<ImportDeclarationStructure>[],
     name: string,
@@ -344,7 +334,7 @@ export async function generate(
                         methods: portFileMethods,
                     },
                 ]);
-                Logger.log(`Writing Port file: ${path.resolve(path.join(portsDir, port.name))}.ts`);
+                Logger.log(`Writing Port file: ${await path.resolve(path.join(portsDir, port.name))}.ts`);
                 portFile.saveSync();
             }
         } // End of Port
@@ -363,7 +353,7 @@ export async function generate(
                     properties: servicePorts,
                 },
             ]);
-            Logger.log(`Writing Service file: ${path.resolve(path.join(servicesDir, service.name))}.ts`);
+            Logger.log(`Writing Service file: ${await path.resolve(path.join(servicesDir, service.name))}.ts`);
             serviceFile.saveSync();
         }
     } // End of Service
@@ -399,7 +389,9 @@ export async function generate(
     }
 
     // Write simpleTypeDefinitions file
-    Logger.log(`Writing Definition file: ${path.resolve(path.join(defDir, "SimpleTypeDefinitions"))}.ts`);
+    Logger.log(
+        `Writing SimpleTypeDefinitions file: ${await path.resolve(path.join(defDir, "SimpleTypeDefinitions"))}.ts`
+    );
     simpleTypeDefinitionsFile.saveSync();
 
     if (!mergedOptions.emitDefinitionsOnly) {
@@ -452,7 +444,7 @@ export async function generate(
             returnType: `Promise<${parsedWsdl.name}Client>`, // TODO: `any` keyword is very dangerous
         });
         createClientDeclaration.setBodyText("return soapCreateClientAsync(args[0], args[1], args[2]) as any;");
-        Logger.log(`Writing Client file: ${path.resolve(path.join(outDir, "client"))}.ts`);
+        Logger.log(`Writing Client file: ${await path.resolve(path.join(outDir, "client"))}.ts`);
         clientFile.saveSync();
     }
 
@@ -491,11 +483,7 @@ export async function generate(
         );
     }
 
-    Logger.log(`Writing Index file: ${path.resolve(path.join(outDir, "index"))}.ts`);
+    Logger.log(`Writing Index file: ${await path.resolve(path.join(outDir, "index"))}.ts`);
 
     indexFile.saveSync();
-}
-
-function isNumber(char: string) {
-    return /^\d+$/.test(char);
 }

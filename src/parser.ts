@@ -152,7 +152,6 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
         open_wsdl(
             wsdlPath,
             {
-                attributesKey: "attributes",
                 namespaceArrayElements: false,
                 ignoredNamespaces: ["tns", "targetNamespace", "typeNamespace"],
             },
@@ -281,7 +280,6 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                     // Parse ComplexTypes
                     for (const [name, complexType] of Object.entries(schemaElement.complexTypes)) {
                         const definition = parseComplexType(parsedWsdl, mergedOptions, name, complexType, nameSpace);
-                        parsedWsdl.definitions.push(definition);
                     }
 
                     // Parse SimpleTypes
@@ -318,12 +316,17 @@ function parseComplexType(
         const element = parseElement(child);
         if (element) {
             if (element.properties) {
-                for (const property of element.properties) {
-                    definition.properties.push(property);
-                }
+                definition.properties.push(...definition.properties);
             }
             if (element.attribute) {
                 definition.attributes.push(element.attribute);
+            }
+
+            if (element.extension?.properties) {
+                definition.properties.push(...element.extension.properties);
+            }
+            if (element.extension?.attributes) {
+                definition.attributes.push(...element.extension.attributes);
             }
         }
     });
@@ -454,32 +457,42 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
             };
         }
         case "simpleContent": {
-            // TODO: Implement this:
-            /**
-             *    <xsd:complexType name="UitingType">
-             *        <xsd:annotation>
-             *            <xsd:documentation>Geeft de uiting weer met de prioriteit</xsd:documentation>
-             *        </xsd:annotation>
-             *
-             *        <xsd:simpleContent>*
-             *            <xsd:extension base="xsd:string">
-             *                <xsd:attribute name="Prioriteit" type="xsd:string"/>
-             *            </xsd:extension>*
-             *        </xsd:simpleContent>
-             *    </xsd:complexType>
-             */
+            const attributes: DefinitionAttribute[] = [];
+            const properties: DefinitionProperty[] = [];
 
             for (const child of element.children) {
                 if (child instanceof ExtensionElement) {
                     Logger.debug("Begin Extension");
                     for (const grandChild of child.children) {
-                        parseElement(grandChild);
+                        const parsedElement = parseElement(grandChild);
+                        if (parsedElement) {
+                            Logger.debug(`  element: ${JSON.stringify(parsedElement)}`);
+                            if (parsedElement.attribute) {
+                                attributes.push(parsedElement.attribute);
+                            }
+                        }
                     }
                     Logger.debug("End Extension");
                 }
             }
 
-            break;
+            if (properties.length == 0) {
+                properties.push({
+                    kind: "SCHEMA",
+                    name: "value",
+                    sourceName: "value",
+                    type: "string",
+                    isArray: false,
+                    isOptional: true,
+                });
+            }
+
+            return {
+                extension: {
+                    properties: properties,
+                    attributes: attributes.length > 0 ? attributes : undefined,
+                },
+            };
         }
     }
 

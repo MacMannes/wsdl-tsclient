@@ -38,6 +38,7 @@ export interface ParsedElement {
     definition?: Definition;
     properties?: DefinitionProperty[];
     attribute?: DefinitionAttribute;
+    extension?: ExtensionDefinition;
 }
 
 export interface Definition {
@@ -50,6 +51,11 @@ export interface Definition {
     docs: string[];
     properties: Array<DefinitionProperty>;
     attributes: Array<DefinitionAttribute>;
+}
+
+export interface ExtensionDefinition {
+    properties: Array<DefinitionProperty>;
+    attributes?: Array<DefinitionAttribute>;
 }
 
 export interface SimpleTypeDefinition {
