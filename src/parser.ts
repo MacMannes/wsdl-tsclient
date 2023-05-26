@@ -1,7 +1,23 @@
 import * as path from "path";
-import { Element, ElementElement, ComplexTypeElement, SimpleTypeElement } from "soap/lib/wsdl/elements";
+import {
+    Element,
+    ElementElement,
+    ExtensionElement,
+    ComplexTypeElement,
+    SimpleTypeElement,
+} from "soap/lib/wsdl/elements";
 import { open_wsdl } from "soap/lib/wsdl/index";
-import { Definition, Method, ParsedWsdl, Port, Service } from "./models/parsed-wsdl";
+import {
+    Definition,
+    DefinitionAttribute,
+    DefinitionProperty,
+    Method,
+    ParsedElement,
+    ParsedWsdl,
+    Port,
+    Service,
+    SimpleTypeDefinition,
+} from "./models/parsed-wsdl";
 import { changeCase } from "./utils/change-case";
 import { stripExtension } from "./utils/file";
 import { reservedKeywords } from "./utils/javascript";
@@ -84,29 +100,17 @@ const NODE_SOAP_PARSED_TYPES: Record<string, string> = Object.entries({
 }, {});
 /* eslint-enable */
 
-function findReferenceDefiniton(visited: Array<VisitedDefinition>, definitionParts: object) {
-    return visited.find((def) => def.parts === definitionParts);
-}
-
 /**
- * parse definition
+ * Create new definition
  * @param parsedWsdl context of parsed wsdl
+ * @param options ParserOptions
  * @param name name of definition, will be used as name of interface
- * @param defParts definition's parts - its properties
  * @param stack definitions stack of path to current subdefinition (immutable)
- * @param visitedDefs set of globally visited definitions to avoid circular definitions
  */
-function parseDefinition(
-    parsedWsdl: ParsedWsdl,
-    options: ParserOptions,
-    name: string,
-    defParts: { [propNameType: string]: any },
-    stack: string[],
-    visitedDefs: Array<VisitedDefinition>
-): Definition {
+function createDefinition(parsedWsdl: ParsedWsdl, options: ParserOptions, name: string, stack: string[]): Definition {
     const defName = changeCase(name, { pascalCase: true });
 
-    Logger.debug(`Parsing Definition ${stack.join(".")}.${name}`);
+    Logger.debug(`Creating Definition ${stack.join(".")}.${name}`);
 
     let nonCollisionDefName: string;
     try {
@@ -129,153 +133,6 @@ function parseDefinition(
     };
 
     parsedWsdl.definitions.push(definition); // Must be here to avoid name collision with `findNonCollisionDefinitionName` if sub-definition has same name
-    // visitedDefs.push({ name: definition.name, parts: defParts, definition }); // NOTE: cache reference to this defintion globally (for avoiding circular references)
-    // if (defParts) {
-    //     // NOTE: `node-soap` has sometimes problem with parsing wsdl files, it includes `defParts.undefined = undefined`
-    //     if ("undefined" in defParts && defParts.undefined === undefined) {
-    //         // TODO: problem while parsing WSDL, maybe report to node-soap
-    //         // TODO: add flag --FailOnWsdlError
-    //         Logger.error({
-    //             message: "Problem while generating a definition file",
-    //             path: stack.join("."),
-    //             parts: defParts,
-    //         });
-    //     } else {
-    //         Object.entries(defParts).forEach(([propName, type]) => {
-    //             Logger.debug(`propName: ${propName}, type: ${JSON.stringify(type)}`);
-    //             if (propName === "targetNSAlias") {
-    //                 definition.docs.push(`@targetNSAlias \`${type}\``);
-    //             } else if (propName === "targetNamespace") {
-    //                 definition.docs.push(`@targetNamespace \`${type}\``);
-    //                 // HIERO: Process target namespace
-    //             } else if (propName.endsWith("[]")) {
-    //                 const stripedPropName = propName.substring(0, propName.length - 2);
-    //                 // Array of
-    //                 if (typeof type === "string") {
-    //                     // primitive type
-    //                     definition.properties.push({
-    //                         kind: "PRIMITIVE",
-    //                         name: stripedPropName,
-    //                         sourceName: propName,
-    //                         description: type,
-    //                         type: "string",
-    //                         isArray: true,
-    //                     });
-    //                 } else if (type instanceof ComplexTypeElement) {
-    //                     // TODO: Finish complex type parsing by updating node-soap
-    //                     definition.properties.push({
-    //                         kind: "PRIMITIVE",
-    //                         name: stripedPropName,
-    //                         sourceName: propName,
-    //                         description: "ComplexType are not supported yet",
-    //                         type: "any",
-    //                         isArray: true,
-    //                     });
-    //                     Logger.warn(`Cannot parse ComplexType '${stack.join(".")}.${name}' - using 'any' type`);
-    //                 } else {
-    //                     // With sub-type
-    //                     const visited = findReferenceDefiniton(visitedDefs, type);
-    //                     if (visited) {
-    //                         // By referencing already declared definition, we will avoid circular references
-    //                         definition.properties.push({
-    //                             kind: "REFERENCE",
-    //                             name: stripedPropName,
-    //                             sourceName: propName,
-    //                             ref: visited.definition,
-    //                             isArray: true,
-    //                         });
-    //                     } else {
-    //                         try {
-    //                             const subDefinition = parseDefinition(
-    //                                 parsedWsdl,
-    //                                 options,
-    //                                 stripedPropName,
-    //                                 type,
-    //                                 [...stack, propName],
-    //                                 visitedDefs
-    //                             );
-    //                             definition.properties.push({
-    //                                 kind: "REFERENCE",
-    //                                 name: stripedPropName,
-    //                                 sourceName: propName,
-    //                                 ref: subDefinition,
-    //                                 isArray: true,
-    //                             });
-    //                         } catch (err) {
-    //                             const e = new Error(
-    //                                 `Error while parsing Subdefinition for '${stack.join(".")}.${name}'`
-    //                             );
-    //                             e.stack.split("\n").slice(0, 2).join("\n") + "\n" + err.stack;
-    //                             throw e;
-    //                         }
-    //                     }
-    //                 }
-    //             } else {
-    //                 if (typeof type === "string") {
-    //                     // primitive type
-    //                     definition.properties.push({
-    //                         kind: "PRIMITIVE",
-    //                         name: propName,
-    //                         sourceName: propName,
-    //                         description: type,
-    //                         type: "string",
-    //                         isArray: false,
-    //                     });
-    //                 } else if (type instanceof ComplexTypeElement) {
-    //                     // TODO: Finish complex type parsing by updating node-soap
-    //                     definition.properties.push({
-    //                         kind: "PRIMITIVE",
-    //                         name: propName,
-    //                         sourceName: propName,
-    //                         description: "ComplexType are not supported yet",
-    //                         type: "any",
-    //                         isArray: false,
-    //                     });
-    //                     Logger.warn(`Cannot parse ComplexType '${stack.join(".")}.${name}' - using 'any' type`);
-    //                 } else {
-    //                     // With sub-type
-    //                     const reference = findReferenceDefiniton(visitedDefs, type);
-    //                     if (reference) {
-    //                         // By referencing already declared definition, we will avoid circular references
-    //                         definition.properties.push({
-    //                             kind: "REFERENCE",
-    //                             name: propName,
-    //                             sourceName: propName,
-    //                             description: "",
-    //                             ref: reference.definition,
-    //                             isArray: false,
-    //                         });
-    //                     } else {
-    //                         try {
-    //                             // HIERO
-    //                             const subDefinition = parseDefinition(
-    //                                 parsedWsdl,
-    //                                 options,
-    //                                 propName,
-    //                                 type,
-    //                                 [...stack, propName],
-    //                                 visitedDefs
-    //                             );
-    //                             definition.properties.push({
-    //                                 kind: "REFERENCE",
-    //                                 name: propName,
-    //                                 sourceName: propName,
-    //                                 ref: subDefinition,
-    //                                 isArray: false,
-    //                             });
-    //                         } catch (err) {
-    //                             const e = new Error(`Error while parsing Subdefinition for ${stack.join(".")}.${name}`);
-    //                             e.stack.split("\n").slice(0, 2).join("\n") + "\n" + err.stack;
-    //                             throw e;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         });
-    //     }
-    // } else {
-    //     // Empty
-    // }
 
     return definition;
 }
@@ -351,27 +208,13 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                     );
                                     inputDefinition = type
                                         ? type
-                                        : parseDefinition(
-                                              parsedWsdl,
-                                              mergedOptions,
-                                              typeName,
-                                              inputMessage.parts,
-                                              [typeName],
-                                              visitedDefinitions
-                                          );
+                                        : createDefinition(parsedWsdl, mergedOptions, typeName, [typeName]);
                                 } else if (inputMessage.parts) {
                                     Logger.debug(`Handling ${methodName}.input.parts`);
                                     const type = parsedWsdl.findDefinition(paramName);
                                     inputDefinition = type
                                         ? type
-                                        : parseDefinition(
-                                              parsedWsdl,
-                                              mergedOptions,
-                                              paramName,
-                                              inputMessage.parts,
-                                              [paramName],
-                                              visitedDefinitions
-                                          );
+                                        : createDefinition(parsedWsdl, mergedOptions, paramName, [paramName]);
                                 } else {
                                     Logger.debug(
                                         `Method '${serviceName}.${portName}.${methodName}' doesn't have any input defined`
@@ -389,26 +232,12 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                     const type = parsedWsdl.findDefinition(typeName);
                                     outputDefinition = type
                                         ? type
-                                        : parseDefinition(
-                                              parsedWsdl,
-                                              mergedOptions,
-                                              typeName,
-                                              outputMessage.parts,
-                                              [typeName],
-                                              visitedDefinitions
-                                          );
+                                        : createDefinition(parsedWsdl, mergedOptions, typeName, [typeName]);
                                 } else {
                                     const type = parsedWsdl.findDefinition(paramName);
                                     outputDefinition = type
                                         ? type
-                                        : parseDefinition(
-                                              parsedWsdl,
-                                              mergedOptions,
-                                              paramName,
-                                              outputMessage.parts,
-                                              [paramName],
-                                              visitedDefinitions
-                                          );
+                                        : createDefinition(parsedWsdl, mergedOptions, paramName, [paramName]);
                                 }
                             }
 
@@ -441,23 +270,30 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                     });
                 } // End of Service cycle
 
+                parsedWsdl.services = services;
+                parsedWsdl.ports = allPorts;
+                parsedWsdl.definitions = [];
+
                 // Parse Schemas
                 for (const [nameSpace, schemaElement] of Object.entries(wsdl.definitions.schemas)) {
                     Logger.debug(`Parsing NameSpace: ${nameSpace}}`);
 
                     // Parse ComplexTypes
                     for (const [name, complexType] of Object.entries(schemaElement.complexTypes)) {
-                        parseComplexType(name, complexType);
+                        const definition = parseComplexType(parsedWsdl, mergedOptions, name, complexType, nameSpace);
+                        parsedWsdl.definitions.push(definition);
                     }
 
                     // Parse SimpleTypes
                     for (const [name, simpleType] of Object.entries(schemaElement.types)) {
-                        parseSimpleType(name, simpleType);
+                        parsedWsdl.simpleTypeDefinitions[name] = parseSimpleType(
+                            parsedWsdl,
+                            mergedOptions,
+                            name,
+                            simpleType
+                        );
                     }
                 }
-
-                parsedWsdl.services = services;
-                parsedWsdl.ports = allPorts;
 
                 return resolve(parsedWsdl);
             }
@@ -465,64 +301,44 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
     });
 }
 
-function parseComplexType(name: String, complexType: ComplexTypeElement) {
-    Logger.debug(`Parsing ComplexType: ${name}`);
+function parseComplexType(
+    parsedWsdl: ParsedWsdl,
+    options: ParserOptions,
+    name: string,
+    complexType: ComplexTypeElement,
+    nameSpace: string
+): Definition {
+    Logger.debug(`Parsing ComplexType name=${name}`);
 
-    complexType.children.forEach((element) => {
-        Logger.debug(`Parsing Element: ${element.name}`);
+    const definition = createDefinition(parsedWsdl, options, name, [nameSpace]);
 
-        parseElement(element);
-    });
-}
+    complexType.children.forEach((child) => {
+        Logger.debug(`Parsing Element: ${child.name}`);
 
-function parseElement(element: any, optional?: boolean) {
-    switch (element.name) {
-        case "annotation": {
-            break;
-        }
-        case "sequence": {
-            if (element.children.length > 0) {
-                for (const child of element.children) {
-                    let name = child.name;
-                    if (name == "element") {
-                        name = child.$name;
-                    }
-                    const minOccurs = child.$minOccurs;
-                    const maxOccurs = child.$maxOccurs;
-                    const isArray = (maxOccurs && maxOccurs == "unbounded" && maxOccurs != "1") ?? false;
-                    const isOptional = optional || (!isArray && minOccurs == "0");
-                    const type = (child as any).$type;
-
-                    if (Logger.isDebug) {
-                        if (name == "choice") {
-                            Logger.debug("Begin Choice");
-                        } else {
-                            const isArrayText = isArray ? `, isArray=true` : "";
-                            const isOptionalText = isOptional ? `, isOptional=true` : "";
-                            Logger.debug(`Child name=${name}, type=${type}${isOptionalText}${isArrayText}`);
-                        }
-                    }
-                    if (name == "choice") {
-                        for (const choiceElement of child.children) {
-                            parseElement(choiceElement, true);
-                        }
-                        Logger.debug("End Choice");
-                    }
+        const element = parseElement(child);
+        if (element) {
+            if (element.properties) {
+                for (const property of element.properties) {
+                    definition.properties.push(property);
                 }
             }
-            break;
+            if (element.attribute) {
+                definition.attributes.push(element.attribute);
+            }
         }
-        case "attribute": {
-            Logger.debug(`Attribute name=${element.$name}, type=${element.$type}, use: ${(element as any).$use}`);
+    });
 
-            break;
-        }
-    }
+    return definition;
 }
 
-function parseSimpleType(name: string, simpleType: SimpleTypeElement) {
+function parseSimpleType(
+    parsedWsdl: ParsedWsdl,
+    options: ParserOptions,
+    name: string,
+    simpleType: SimpleTypeElement
+): SimpleTypeDefinition {
     let type = "string";
-    const allowedValues: string[] = [];
+    const enumerationValues: string[] = [];
 
     simpleType.children.forEach((child) => {
         if (child.name == "restriction") {
@@ -533,23 +349,139 @@ function parseSimpleType(name: string, simpleType: SimpleTypeElement) {
 
             child.children.forEach((restriction: any) => {
                 if (restriction.name == "enumeration") {
-                    allowedValues.push(restriction.$value);
+                    enumerationValues.push(restriction.$value);
                 }
             });
         }
     });
 
+    let shouldAddImport = true;
     const nodeSoapType: string | undefined = NODE_SOAP_PARSED_TYPES[type];
     if (nodeSoapType) {
         type = nodeSoapType;
+        shouldAddImport = false;
     }
 
     if (Logger.isDebug) {
         let allowedValuesAsString = "";
-        if (allowedValues.length > 0) {
-            allowedValuesAsString = `, allowedValues=${allowedValues.join(", ")}`;
+        if (enumerationValues.length > 0) {
+            allowedValuesAsString = `, allowedValues=${enumerationValues.join(", ")}`;
         }
 
-        Logger.debug(`Parsing SimpleType: ${name}: ${type}${allowedValuesAsString}`);
+        Logger.debug(`Parsing SimpleType name=${name}, type=${type}, ${allowedValuesAsString}`);
     }
+
+    return {
+        name: name,
+        type: type,
+        enumerationValues: enumerationValues.length > 0 ? enumerationValues : undefined,
+        shouldAddImport: shouldAddImport,
+    };
+}
+
+function parseElement(element: Element, optional?: boolean): ParsedElement | undefined {
+    switch (element.name) {
+        case "annotation": {
+            break;
+        }
+        case "sequence": {
+            const properties: DefinitionProperty[] = [];
+
+            for (const child of element.children) {
+                let name = child.name;
+                if (name == "element") {
+                    name = child.$name;
+                }
+                const minOccurs = (child as ElementElement).$minOccurs;
+                const maxOccurs = (child as ElementElement).$maxOccurs;
+                const isArray = maxOccurs && maxOccurs != "1";
+                const isOptional = optional || (!isArray && minOccurs == "0");
+                const type = (child as any).$type;
+
+                if (Logger.isDebug) {
+                    const isArrayText = isArray ? `, isArray=true` : "";
+                    const isOptionalText = isOptional ? `, isOptional=true` : "";
+                    Logger.debug(`  Child name=${name}, type=${type}${isOptionalText}${isArrayText}`);
+                }
+                properties.push({
+                    kind: "SCHEMA",
+                    name: name,
+                    sourceName: name,
+                    type: type,
+                    isArray: isArray,
+                    isOptional: isOptional,
+                });
+
+                if (name == "choice") {
+                    Logger.debug("Begin Choice");
+
+                    for (const choiceElement of child.children) {
+                        const parsedElement = parseElement(choiceElement, true);
+                        if (parsedElement && parsedElement.properties) {
+                            for (const property of parsedElement.properties) {
+                                properties.push(property);
+                            }
+                        }
+                    }
+                    Logger.debug("End Choice");
+                }
+            }
+
+            return { properties: properties };
+        }
+        case "attribute": {
+            Logger.debug(
+                `Attribute name=${element.$name}, type=${(element as ElementElement).$type}, use: ${
+                    (element as any).$use
+                }`
+            );
+
+            let type = "string";
+            let shouldAddImport = true;
+            const nodeSoapType: string | undefined = NODE_SOAP_PARSED_TYPES[type];
+            if (nodeSoapType) {
+                type = nodeSoapType;
+                shouldAddImport = false;
+            }
+
+            return {
+                attribute: {
+                    name: element.$name,
+                    shouldAddImport: shouldAddImport,
+                    type: type,
+                    use: (element as any).$use,
+                },
+            };
+        }
+        case "simpleContent": {
+            // TODO: Implement this:
+            /**
+             *    <xsd:complexType name="UitingType">
+             *        <xsd:annotation>
+             *            <xsd:documentation>Geeft de uiting weer met de prioriteit</xsd:documentation>
+             *        </xsd:annotation>
+             *
+             *        <xsd:simpleContent>*
+             *            <xsd:extension base="xsd:string">
+             *                <xsd:attribute name="Prioriteit" type="xsd:string"/>
+             *            </xsd:extension>*
+             *        </xsd:simpleContent>
+             *    </xsd:complexType>
+             */
+
+            for (const child of element.children) {
+                if (child instanceof ExtensionElement) {
+                    Logger.debug("Begin Extension");
+                    for (const grandChild of child.children) {
+                        parseElement(grandChild);
+                    }
+                    Logger.debug("End Extension");
+                }
+            }
+
+            break;
+        }
+    }
+
+    return undefined;
 }

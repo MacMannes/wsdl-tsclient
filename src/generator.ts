@@ -6,10 +6,11 @@ import {
     OptionalKind,
     Project,
     PropertySignatureStructure,
+    SourceFile,
     StructureKind,
 } from "ts-morph";
 import { ModelPropertyNaming } from ".";
-import { Definition, Method, ParsedWsdl } from "./models/parsed-wsdl";
+import { Definition, DefinitionAttribute, Method, ParsedWsdl, SimpleTypeDefinition } from "./models/parsed-wsdl";
 import { Logger } from "./utils/logger";
 
 export interface GeneratorOptions {
@@ -22,6 +23,8 @@ const defaultOptions: GeneratorOptions = {
     modelPropertyNaming: null,
 };
 
+const simpleTypeDefinitionsName = "SimpleTypeDefinitions";
+
 /**
  * To avoid duplicated imports
  */
@@ -30,7 +33,19 @@ function addSafeImport(
     moduleSpecifier: string,
     namedImport: string
 ) {
-    if (!imports.find((imp) => imp.moduleSpecifier == moduleSpecifier)) {
+    const importDeclaration = imports.find((imp) => imp.moduleSpecifier == moduleSpecifier);
+
+    if (importDeclaration) {
+        // ImportDeclaration already exists
+        if (Array.isArray(importDeclaration.namedImports)) {
+            const namedImports = importDeclaration.namedImports as Array<string>;
+            if (namedImports.indexOf(namedImport) == -1) {
+                // namedImports does not exist, so let's add it
+                namedImports.push(namedImport);
+            }
+        }
+    } else {
+        // ImportDeclaration does not exist yet, so we can add a new one
         imports.push({
             moduleSpecifier,
             namedImports: [{ name: namedImport }],
@@ -52,16 +67,30 @@ function sanitizePropName(propName: string) {
 function createProperty(
     name: string,
     type: string,
-    doc: string,
     isArray: boolean,
-    optional = true
+    doc?: string,
+    optional = false
 ): PropertySignatureStructure {
     return {
         kind: StructureKind.PropertySignature,
         name: sanitizePropName(name),
-        docs: [doc],
-        hasQuestionToken: true,
+        docs: doc ? [doc] : undefined,
+        hasQuestionToken: optional,
         type: isArray ? `Array<${type}>` : type,
+    };
+}
+
+function createAttributeProperty(
+    attributes: DefinitionAttribute[],
+    imports: OptionalKind<ImportDeclarationStructure>[],
+    doc?: string
+): PropertySignatureStructure {
+    return {
+        kind: StructureKind.PropertySignature,
+        name: "attributes",
+        docs: doc ? [doc] : undefined,
+        hasQuestionToken: false,
+        type: "{ foo: string, bar: number }",
     };
 }
 
@@ -71,7 +100,9 @@ function generateDefinitionFile(
     defDir: string,
     stack: string[],
     generated: Definition[],
-    options: GeneratorOptions
+    options: GeneratorOptions,
+    allDefinitionNames?: string[],
+    simpleTypeDefinitions?: { [name: string]: SimpleTypeDefinition }
 ): void {
     const defName = definition.name;
     const defFilePath = path.join(defDir, `${defName}.ts`);
@@ -96,7 +127,24 @@ function generateDefinitionFile(
         }
         if (prop.kind === "PRIMITIVE") {
             // e.g. string
-            definitionProperties.push(createProperty(prop.name, prop.type, prop.description, prop.isArray));
+            definitionProperties.push(
+                createProperty(prop.name, prop.type, prop.isArray, prop.description, prop.isOptional)
+            );
+        } else if (prop.kind === "SCHEMA") {
+            // Definition which is parsed from schema
+            const type = prop.type;
+            if (simpleTypeDefinitions) {
+                const simpleTypeDefinition: SimpleTypeDefinition | undefined = simpleTypeDefinitions[type];
+                if (simpleTypeDefinition) {
+                    addSafeImport(definitionImports, `./${simpleTypeDefinitionsName}`, prop.type);
+                }
+            }
+            if (allDefinitionNames && allDefinitionNames.indexOf(type) != -1) {
+                // Add import
+                addSafeImport(definitionImports, `./${prop.type}`, prop.type);
+            }
+
+            definitionProperties.push(createProperty(prop.name, type, prop.isArray, prop.description, prop.isOptional));
         } else if (prop.kind === "REFERENCE") {
             // e.g. Items
             if (!generated.includes(prop.ref)) {
@@ -107,8 +155,16 @@ function generateDefinitionFile(
             if (prop.ref.name !== definition.name) {
                 addSafeImport(definitionImports, `./${prop.ref.name}`, prop.ref.name);
             }
-            definitionProperties.push(createProperty(prop.name, prop.ref.name, prop.sourceName, prop.isArray));
+            definitionProperties.push(
+                createProperty(prop.name, prop.ref.name, prop.isArray, prop.sourceName, prop.isOptional)
+            );
         }
+    }
+
+    if (definition.attributes.length > 0) {
+        const attributesName = `${defName}Attributes`;
+        definitionProperties.push(createProperty("attributes", attributesName, false, attributesName, false));
+        generateAttributesDefinition(defFile, definitionImports, attributesName, definition.attributes);
     }
 
     defFile.addImportDeclarations(definitionImports);
@@ -124,6 +180,48 @@ function generateDefinitionFile(
     ]);
     Logger.log(`Writing Definition file: ${path.resolve(path.join(defDir, defName))}.ts`);
     defFile.saveSync();
+}
+
+function generateAttributesDefinition(
+    sourceFile: SourceFile,
+    definitionImports: OptionalKind<ImportDeclarationStructure>[],
+    name: string,
+    attributes: Array<DefinitionAttribute>
+) {
+    const attributeProperties: PropertySignatureStructure[] = [];
+
+    attributes.forEach((prop) => {
+        const isOptional = prop.use != "required";
+        attributeProperties.push(createProperty(prop.name, prop.type, false, undefined, isOptional));
+    });
+
+    sourceFile.addStatements([
+        {
+            leadingTrivia: (writer) => writer.newLine(),
+            isExported: true,
+            name: name,
+            kind: StructureKind.Interface,
+            properties: attributeProperties,
+        },
+    ]);
+}
+
+function generateEnumDefinition(sourceFile: SourceFile, name: string, enumerationValues: string[]) {
+    sourceFile.addTypeAlias({
+        name: name,
+        type: (writer) => {
+            writer.write(enumerationValues.map((it) => `"${it}"`).join(" | "));
+        },
+        isExported: true,
+    });
+}
+
+function generateTypeDefinition(sourceFile: SourceFile, name: string, type: string) {
+    sourceFile.addTypeAlias({
+        name: name,
+        type: type,
+        isExported: true,
+    });
 }
 
 export async function generate(
@@ -270,6 +368,40 @@ export async function generate(
         }
     } // End of Service
 
+    // Process all schema definitions
+    for (const definition of parsedWsdl.definitions) {
+        generateDefinitionFile(
+            project,
+            definition,
+            defDir,
+            [definition.name],
+            allDefinitions,
+            mergedOptions,
+            parsedWsdl.definitions.map((it) => it.name),
+            parsedWsdl.simpleTypeDefinitions
+        );
+    }
+
+    // Create SimpleTypeDefinitions file
+    const simpleTypeDefinitionsFilePath = path.join(defDir, simpleTypeDefinitionsName + ".ts");
+    const simpleTypeDefinitionsFile = project.createSourceFile(simpleTypeDefinitionsFilePath, "", {
+        overwrite: true,
+    });
+
+    // Process all simpleTypeDefinitions
+    for (const key in parsedWsdl.simpleTypeDefinitions) {
+        const definition = parsedWsdl.simpleTypeDefinitions[key];
+        if (definition.enumerationValues) {
+            generateEnumDefinition(simpleTypeDefinitionsFile, definition.name, definition.enumerationValues);
+        } else {
+            generateTypeDefinition(simpleTypeDefinitionsFile, definition.name, definition.type);
+        }
+    }
+
+    // Write simpleTypeDefinitions file
+    Logger.log(`Writing Definition file: ${path.resolve(path.join(defDir, "SimpleTypeDefinitions"))}.ts`);
+    simpleTypeDefinitionsFile.saveSync();
+
     if (!mergedOptions.emitDefinitionsOnly) {
         const clientFilePath = path.join(outDir, "client.ts");
         const clientFile = project.createSourceFile(clientFilePath, "", {
@@ -362,4 +494,8 @@ export async function generate(
     Logger.log(`Writing Index file: ${path.resolve(path.join(outDir, "index"))}.ts`);
 
     indexFile.saveSync();
+}
+
+function isNumber(char: string) {
+    return /^\d+$/.test(char);
 }

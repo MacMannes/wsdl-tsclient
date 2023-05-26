@@ -6,8 +6,9 @@ export type DefinitionProperty =
           name: string;
           sourceName: string;
           description?: string;
-          kind: "PRIMITIVE";
+          kind: "PRIMITIVE" | "SCHEMA";
           isArray?: boolean;
+          isOptional?: boolean;
           type: string;
       }
     | {
@@ -20,30 +21,24 @@ export type DefinitionProperty =
            */
           kind: "REFERENCE";
           isArray?: boolean;
+          isOptional?: boolean;
           ref: Definition;
       };
 
-export type DefinitionAttribute =
-    | {
-          name: string;
-          sourceName: string;
-          kind: "PRIMITIVE";
-          type: string;
-          use?: DefinitionAttributeUse;
-      }
-    | {
-          name: string;
-          sourceName: string;
-          /**
-           * This definition only reference another definition instead of primitive type
-           * @description helps to avoid circular references
-           */
-          kind: "REFERENCE";
-          ref: Definition;
-          use?: DefinitionAttributeUse;
-      };
+export interface DefinitionAttribute {
+    name: string;
+    type: string;
+    shouldAddImport: boolean;
+    use?: DefinitionAttributeUse;
+}
 
 type DefinitionAttributeUse = "optional" | "prohibited" | "required";
+
+export interface ParsedElement {
+    definition?: Definition;
+    properties?: DefinitionProperty[];
+    attribute?: DefinitionAttribute;
+}
 
 export interface Definition {
     /** Will be used as name of generated Definition's interface */
@@ -55,6 +50,15 @@ export interface Definition {
     docs: string[];
     properties: Array<DefinitionProperty>;
     attributes: Array<DefinitionAttribute>;
+}
+
+export interface SimpleTypeDefinition {
+    name: string;
+    type: string;
+    shouldAddImport: boolean;
+    enumerationValues?: Array<string>;
+    description?: string;
+    attributes?: Array<DefinitionAttribute>;
 }
 
 export interface Method {
@@ -125,6 +129,7 @@ export class ParsedWsdl {
     wsdlPath: string;
 
     definitions: Array<Definition> = [];
+    simpleTypeDefinitions: { [name: string]: SimpleTypeDefinition } = {};
     ports: Array<Port> = [];
     services: Array<Service> = [];
 
