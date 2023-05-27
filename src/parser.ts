@@ -341,6 +341,14 @@ function parseComplexType(
     return definition;
 }
 
+function getNodeSoapParsedType(type?: string): string | undefined {
+    if (!type) return undefined;
+
+    const lookupType = type.startsWith("xsd:") ? type.substring(4) : type;
+
+    return NODE_SOAP_PARSED_TYPES[lookupType];
+}
+
 function parseSimpleType(
     parsedWsdl: ParsedWsdl,
     options: ParserOptions,
@@ -366,7 +374,7 @@ function parseSimpleType(
     });
 
     let shouldAddImport = true;
-    const nodeSoapType: string | undefined = NODE_SOAP_PARSED_TYPES[type];
+    const nodeSoapType: string | undefined = getNodeSoapParsedType(type);
     if (nodeSoapType) {
         type = nodeSoapType;
         shouldAddImport = false;
@@ -406,34 +414,49 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
                 const maxOccurs = (child as ElementElement).$maxOccurs;
                 const isArray = maxOccurs && maxOccurs != "1";
                 const isOptional = optional || (!isArray && minOccurs == "0");
-                const type = (child as any).$type;
+                let type = (child as any).$type;
+
+                const nodeSoapType: string | undefined = getNodeSoapParsedType(type);
+                if (nodeSoapType) {
+                    type = nodeSoapType;
+                }
 
                 if (Logger.isDebug) {
                     const isArrayText = isArray ? `, isArray=true` : "";
                     const isOptionalText = isOptional ? `, isOptional=true` : "";
                     Logger.debug(`  Child name=${name}, type=${type}${isOptionalText}${isArrayText}`);
                 }
-                properties.push({
-                    kind: "SCHEMA",
-                    name: name,
-                    sourceName: name,
-                    type: type,
-                    isArray: isArray,
-                    isOptional: isOptional,
-                });
 
-                if (name == "choice") {
-                    Logger.debug("Begin Choice");
+                switch (name) {
+                    case "choice": {
+                        Logger.debug("Begin Choice");
 
-                    for (const choiceElement of child.children) {
-                        const parsedElement = parseElement(choiceElement, true);
-                        if (parsedElement && parsedElement.properties) {
-                            for (const property of parsedElement.properties) {
-                                properties.push(property);
+                        for (const choiceElement of child.children) {
+                            const parsedElement = parseElement(choiceElement, true);
+                            if (parsedElement && parsedElement.properties) {
+                                for (const property of parsedElement.properties) {
+                                    properties.push(property);
+                                }
                             }
                         }
+                        Logger.debug("End Choice");
+
+                        break;
                     }
-                    Logger.debug("End Choice");
+                    case "any": {
+                        break;
+                    }
+                    default: {
+                        properties.push({
+                            kind: "SCHEMA",
+                            name: name,
+                            sourceName: name,
+                            type: type,
+                            isArray: isArray,
+                            isOptional: isOptional,
+                        });
+                        break;
+                    }
                 }
             }
 
