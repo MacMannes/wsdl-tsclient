@@ -9,7 +9,6 @@
   "engines": {
     "node": ">=10.0.0"
   },
-  "prepare": "npm run build",
   "scripts": {
     "pretest": "rm -rf ./test/generated",
     "test": "npm run test:node-soap && npm run test:node-soap2 && npm run test:public",
