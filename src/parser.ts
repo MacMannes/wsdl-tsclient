@@ -132,7 +132,7 @@ function createDefinition(parsedWsdl: ParsedWsdl, options: ParserOptions, name: 
         optional: false,
     };
 
-    parsedWsdl.definitions.push(definition); // Must be here to avoid name collision with `findNonCollisionDefinitionName` if sub-definition has same name
+    // parsedWsdl.definitions.push(definition); // Must be here to avoid name collision with `findNonCollisionDefinitionName` if sub-definition has same name
 
     return definition;
 }
