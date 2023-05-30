@@ -302,7 +302,8 @@ function parseWsdl(wsdlPath, options) {
                             // Parse SimpleTypes
                             for (var _t = 0, _u = Object.entries(schemaElement.types); _t < _u.length; _t++) {
                                 var _v = _u[_t], name_2 = _v[0], simpleType = _v[1];
-                                parsedWsdl.simpleTypeDefinitions[name_2] = parseSimpleType(parsedWsdl, mergedOptions, name_2, simpleType);
+                                var simpleTypeDefinition = parseSimpleType(parsedWsdl, mergedOptions, name_2, simpleType);
+                                parsedWsdl.simpleTypeDefinitions[simpleTypeDefinition.name] = simpleTypeDefinition;
                             }
                         }
                         return resolve(parsedWsdl);
@@ -353,6 +354,7 @@ function getNodeSoapParsedType(type) {
     return NODE_SOAP_PARSED_TYPES[lookupType];
 }
 function parseSimpleType(parsedWsdl, options, name, simpleType) {
+    var defName = (0, change_case_1.changeCase)(name, { pascalCase: true });
     var type = "string";
     var enumerationValues = [];
     simpleType.children.forEach(function (child) {
@@ -374,15 +376,20 @@ function parseSimpleType(parsedWsdl, options, name, simpleType) {
         type = nodeSoapType;
         shouldAddImport = false;
     }
+    else {
+        if (type) {
+            type = (0, change_case_1.changeCase)(type, { pascalCase: true });
+        }
+    }
     if (logger_1.Logger.isDebug) {
         var allowedValuesAsString = "";
         if (enumerationValues.length > 0) {
             allowedValuesAsString = ", allowedValues=".concat(enumerationValues.join(", "));
         }
-        logger_1.Logger.debug("Parsing SimpleType name=".concat(name, ", type=").concat(type, ", ").concat(allowedValuesAsString));
+        logger_1.Logger.debug("Parsing SimpleType name=".concat(defName, ", type=").concat(type, ", ").concat(allowedValuesAsString));
     }
     return {
-        name: name,
+        name: defName,
         type: type,
         enumerationValues: enumerationValues.length > 0 ? enumerationValues : undefined,
         shouldAddImport: shouldAddImport,
@@ -401,14 +408,17 @@ function parseElement(element, optional) {
                 if (name_3 == "element") {
                     name_3 = child.$name;
                 }
+                var propName = (0, change_case_1.changeCase)(name_3, { pascalCase: true });
                 var minOccurs = child.$minOccurs;
                 var maxOccurs = child.$maxOccurs;
                 var isArray = maxOccurs && maxOccurs != "1";
                 var isOptional = optional || (!isArray && minOccurs == "0");
                 var type = child.$type;
                 var nodeSoapType = getNodeSoapParsedType(type);
+                var shouldAddImport = true;
                 if (nodeSoapType) {
                     type = nodeSoapType;
+                    shouldAddImport = false;
                 }
                 else {
                     if (type) {
@@ -418,7 +428,7 @@ function parseElement(element, optional) {
                 if (logger_1.Logger.isDebug) {
                     var isArrayText = isArray ? ", isArray=true" : "";
                     var isOptionalText = isOptional ? ", isOptional=true" : "";
-                    logger_1.Logger.debug("  Child name=".concat(name_3, ", type=").concat(type).concat(isOptionalText).concat(isArrayText));
+                    logger_1.Logger.debug("  Child name=".concat(propName, ", type=").concat(type).concat(isOptionalText).concat(isArrayText));
                 }
                 switch (name_3) {
                     case "choice": {
@@ -442,11 +452,12 @@ function parseElement(element, optional) {
                     default: {
                         properties.push({
                             kind: "SCHEMA",
-                            name: name_3,
+                            name: propName,
                             sourceName: name_3,
                             type: type,
                             isArray: isArray,
                             isOptional: isOptional,
+                            shouldAddImport: shouldAddImport,
                         });
                         break;
                     }
@@ -500,6 +511,7 @@ function parseElement(element, optional) {
                     type: "string",
                     isArray: false,
                     isOptional: true,
+                    shouldAddImport: false,
                 });
             }
             return {

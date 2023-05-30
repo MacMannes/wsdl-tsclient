@@ -285,12 +285,8 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
 
                     // Parse SimpleTypes
                     for (const [name, simpleType] of Object.entries(schemaElement.types)) {
-                        parsedWsdl.simpleTypeDefinitions[name] = parseSimpleType(
-                            parsedWsdl,
-                            mergedOptions,
-                            name,
-                            simpleType
-                        );
+                        const simpleTypeDefinition = parseSimpleType(parsedWsdl, mergedOptions, name, simpleType);
+                        parsedWsdl.simpleTypeDefinitions[simpleTypeDefinition.name] = simpleTypeDefinition;
                     }
                 }
 
@@ -357,6 +353,8 @@ function parseSimpleType(
     name: string,
     simpleType: SimpleTypeElement
 ): SimpleTypeDefinition {
+    const defName = changeCase(name, { pascalCase: true });
+
     let type = "string";
     const enumerationValues: string[] = [];
 
@@ -380,6 +378,10 @@ function parseSimpleType(
     if (nodeSoapType) {
         type = nodeSoapType;
         shouldAddImport = false;
+    } else {
+        if (type) {
+            type = changeCase(type, { pascalCase: true });
+        }
     }
 
     if (Logger.isDebug) {
@@ -388,11 +390,11 @@ function parseSimpleType(
             allowedValuesAsString = `, allowedValues=${enumerationValues.join(", ")}`;
         }
 
-        Logger.debug(`Parsing SimpleType name=${name}, type=${type}, ${allowedValuesAsString}`);
+        Logger.debug(`Parsing SimpleType name=${defName}, type=${type}, ${allowedValuesAsString}`);
     }
 
     return {
-        name: name,
+        name: defName,
         type: type,
         enumerationValues: enumerationValues.length > 0 ? enumerationValues : undefined,
         shouldAddImport: shouldAddImport,
@@ -412,6 +414,8 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
                 if (name == "element") {
                     name = child.$name;
                 }
+                const propName = changeCase(name, { pascalCase: true });
+
                 const minOccurs = (child as ElementElement).$minOccurs;
                 const maxOccurs = (child as ElementElement).$maxOccurs;
                 const isArray = maxOccurs && maxOccurs != "1";
@@ -419,8 +423,10 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
                 let type = (child as any).$type;
 
                 const nodeSoapType: string | undefined = getNodeSoapParsedType(type);
+                let shouldAddImport = true;
                 if (nodeSoapType) {
                     type = nodeSoapType;
+                    shouldAddImport = false;
                 } else {
                     if (type) {
                         type = changeCase(type, { pascalCase: true });
@@ -430,7 +436,7 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
                 if (Logger.isDebug) {
                     const isArrayText = isArray ? `, isArray=true` : "";
                     const isOptionalText = isOptional ? `, isOptional=true` : "";
-                    Logger.debug(`  Child name=${name}, type=${type}${isOptionalText}${isArrayText}`);
+                    Logger.debug(`  Child name=${propName}, type=${type}${isOptionalText}${isArrayText}`);
                 }
 
                 switch (name) {
@@ -455,11 +461,12 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
                     default: {
                         properties.push({
                             kind: "SCHEMA",
-                            name: name,
+                            name: propName,
                             sourceName: name,
                             type: type,
                             isArray: isArray,
                             isOptional: isOptional,
+                            shouldAddImport: shouldAddImport,
                         });
                         break;
                     }
@@ -520,6 +527,7 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
                     type: "string",
                     isArray: false,
                     isOptional: true,
+                    shouldAddImport: false,
                 });
             }
 

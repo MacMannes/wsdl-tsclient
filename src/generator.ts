@@ -37,13 +37,11 @@ function addSafeImport(
 
     if (importDeclaration) {
         // ImportDeclaration already exists
-        /**
-         * TODO: its is not an array of strings but array of objects: [{ name: namedImport }]
-         */
-
         if (Array.isArray(importDeclaration.namedImports)) {
             const namedImports = importDeclaration.namedImports as Array<any>;
-            if (!namedImports.find((imp) => imp.name == namedImport)) {
+            if (
+                !namedImports.find((imp) => (typeof imp == "object" && imp.name == namedImport) || imp === namedImport)
+            ) {
                 // namedImport does not exist yet, so let's add it
                 namedImports.push(namedImport);
             }
@@ -127,10 +125,10 @@ function generateDefinitionFile(
                 const simpleTypeDefinition: SimpleTypeDefinition | undefined = simpleTypeDefinitions[type];
                 if (simpleTypeDefinition) {
                     addSafeImport(definitionImports, `./${simpleTypeDefinitionsName}`, prop.type);
+                } else {
+                    addSafeImport(definitionImports, `./${prop.type}`, prop.type);
                 }
-            }
-            if (allDefinitionNames && allDefinitionNames.indexOf(type) != -1) {
-                // Add import
+            } else {
                 addSafeImport(definitionImports, `./${prop.type}`, prop.type);
             }
 
@@ -154,7 +152,7 @@ function generateDefinitionFile(
     if (definition.attributes.length > 0) {
         const attributesName = `${defName}Attributes`;
         definitionProperties.push(createProperty("attributes", attributesName, false, undefined, false));
-        createAttributesDefinition(defFile, definitionImports, attributesName, definition.attributes);
+        generateAttributesDefinition(defFile, definitionImports, attributesName, definition.attributes);
     }
 
     defFile.addImportDeclarations(definitionImports);
@@ -172,7 +170,7 @@ function generateDefinitionFile(
     defFile.saveSync();
 }
 
-function createAttributesDefinition(
+function generateAttributesDefinition(
     sourceFile: SourceFile,
     definitionImports: OptionalKind<ImportDeclarationStructure>[],
     name: string,

@@ -10,6 +10,7 @@ export type DefinitionProperty =
           isArray?: boolean;
           isOptional?: boolean;
           type: string;
+          shouldAddImport: boolean;
       }
     | {
           name: string;

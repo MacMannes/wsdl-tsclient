@@ -6,6 +6,7 @@ export declare type DefinitionProperty = {
     isArray?: boolean;
     isOptional?: boolean;
     type: string;
+    shouldAddImport: boolean;
 } | {
     name: string;
     sourceName: string;

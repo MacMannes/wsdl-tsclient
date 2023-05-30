@@ -77,12 +77,9 @@ function addSafeImport(imports, moduleSpecifier, namedImport) {
     var importDeclaration = imports.find(function (imp) { return imp.moduleSpecifier == moduleSpecifier; });
     if (importDeclaration) {
         // ImportDeclaration already exists
-        /**
-         * TODO: its is not an array of strings but array of objects: [{ name: namedImport }]
-         */
         if (Array.isArray(importDeclaration.namedImports)) {
             var namedImports = importDeclaration.namedImports;
-            if (!namedImports.find(function (imp) { return imp.name == namedImport; })) {
+            if (!namedImports.find(function (imp) { return (typeof imp == "object" && imp.name == namedImport) || imp === namedImport; })) {
                 // namedImport does not exist yet, so let's add it
                 namedImports.push(namedImport);
             }
@@ -149,9 +146,11 @@ function generateDefinitionFile(project, definition, defDir, stack, generated, o
                 if (simpleTypeDefinition) {
                     addSafeImport(definitionImports, "./".concat(simpleTypeDefinitionsName), prop.type);
                 }
+                else {
+                    addSafeImport(definitionImports, "./".concat(prop.type), prop.type);
+                }
             }
-            if (allDefinitionNames && allDefinitionNames.indexOf(type) != -1) {
-                // Add import
+            else {
                 addSafeImport(definitionImports, "./".concat(prop.type), prop.type);
             }
             definitionProperties.push(createProperty(prop.name, type, prop.isArray, prop.description, prop.isOptional));
@@ -172,7 +171,7 @@ function generateDefinitionFile(project, definition, defDir, stack, generated, o
     if (definition.attributes.length > 0) {
         var attributesName = "".concat(defName, "Attributes");
         definitionProperties.push(createProperty("attributes", attributesName, false, undefined, false));
-        createAttributesDefinition(defFile, definitionImports, attributesName, definition.attributes);
+        generateAttributesDefinition(defFile, definitionImports, attributesName, definition.attributes);
     }
     defFile.addImportDeclarations(definitionImports);
     defFile.addStatements([
@@ -188,7 +187,7 @@ function generateDefinitionFile(project, definition, defDir, stack, generated, o
     logger_1.Logger.log("Writing Definition file: ".concat(path_1.default.resolve(path_1.default.join(defDir, defName)), ".ts"));
     defFile.saveSync();
 }
-function createAttributesDefinition(sourceFile, definitionImports, name, attributes) {
+function generateAttributesDefinition(sourceFile, definitionImports, name, attributes) {
     var attributeProperties = [];
     attributes.forEach(function (prop) {
         var isOptional = prop.use != "required";
