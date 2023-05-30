@@ -395,74 +395,100 @@ function parseSimpleType(parsedWsdl, options, name, simpleType) {
         shouldAddImport: shouldAddImport,
     };
 }
+function addSafeProperty(properties, property) {
+    var existingProperty = properties.find(function (it) { return it.name == property.name; });
+    if (!existingProperty)
+        properties.push(property);
+}
 function parseElement(element, optional) {
     switch (element.name) {
         case "annotation": {
             break;
         }
+        case "element": {
+            var properties = [];
+            var name_3 = element.$name;
+            var propName = (0, change_case_1.changeCase)(name_3, { pascalCase: true });
+            var minOccurs = element.$minOccurs;
+            var maxOccurs = element.$maxOccurs;
+            var isArray = maxOccurs && maxOccurs != "1";
+            var isOptional = optional || (!isArray && minOccurs == "0");
+            var type = element.$type;
+            var nodeSoapType = getNodeSoapParsedType(type);
+            var shouldAddImport = true;
+            if (nodeSoapType) {
+                type = nodeSoapType;
+                shouldAddImport = false;
+            }
+            else {
+                if (type) {
+                    type = (0, change_case_1.changeCase)(type, { pascalCase: true });
+                }
+            }
+            if (logger_1.Logger.isDebug) {
+                var isArrayText = isArray ? ", isArray=true" : "";
+                var isOptionalText = isOptional ? ", isOptional=true" : "";
+                logger_1.Logger.debug("  Child name=".concat(propName, ", type=").concat(type).concat(isOptionalText).concat(isArrayText));
+            }
+            switch (name_3) {
+                case "sequence": {
+                    logger_1.Logger.debug("Begin nested sequence");
+                    var parsedElement = parseElement(element, false);
+                    if (parsedElement && parsedElement.properties) {
+                        for (var _i = 0, _a = parsedElement.properties; _i < _a.length; _i++) {
+                            var property = _a[_i];
+                            addSafeProperty(properties, property);
+                        }
+                    }
+                    logger_1.Logger.debug("End nested sequence");
+                    break;
+                }
+                case "any": {
+                    break;
+                }
+                default: {
+                    properties.push({
+                        kind: "SCHEMA",
+                        name: propName,
+                        sourceName: name_3,
+                        type: type,
+                        isArray: isArray,
+                        isOptional: isOptional,
+                        shouldAddImport: shouldAddImport,
+                    });
+                    break;
+                }
+            }
+            return { properties: properties };
+        }
         case "sequence": {
             var properties = [];
-            for (var _i = 0, _a = element.children; _i < _a.length; _i++) {
-                var child = _a[_i];
-                var name_3 = child.name;
-                if (name_3 == "element") {
-                    name_3 = child.$name;
-                }
-                var propName = (0, change_case_1.changeCase)(name_3, { pascalCase: true });
-                var minOccurs = child.$minOccurs;
-                var maxOccurs = child.$maxOccurs;
-                var isArray = maxOccurs && maxOccurs != "1";
-                var isOptional = optional || (!isArray && minOccurs == "0");
-                var type = child.$type;
-                var nodeSoapType = getNodeSoapParsedType(type);
-                var shouldAddImport = true;
-                if (nodeSoapType) {
-                    type = nodeSoapType;
-                    shouldAddImport = false;
-                }
-                else {
-                    if (type) {
-                        type = (0, change_case_1.changeCase)(type, { pascalCase: true });
-                    }
-                }
-                if (logger_1.Logger.isDebug) {
-                    var isArrayText = isArray ? ", isArray=true" : "";
-                    var isOptionalText = isOptional ? ", isOptional=true" : "";
-                    logger_1.Logger.debug("  Child name=".concat(propName, ", type=").concat(type).concat(isOptionalText).concat(isArrayText));
-                }
-                switch (name_3) {
-                    case "choice": {
-                        logger_1.Logger.debug("Begin Choice");
-                        for (var _b = 0, _c = child.children; _b < _c.length; _b++) {
-                            var choiceElement = _c[_b];
-                            var parsedElement = parseElement(choiceElement, true);
-                            if (parsedElement && parsedElement.properties) {
-                                for (var _d = 0, _e = parsedElement.properties; _d < _e.length; _d++) {
-                                    var property = _e[_d];
-                                    properties.push(property);
-                                }
-                            }
-                        }
-                        logger_1.Logger.debug("End Choice");
-                        break;
-                    }
-                    case "any": {
-                        break;
-                    }
-                    default: {
-                        properties.push({
-                            kind: "SCHEMA",
-                            name: propName,
-                            sourceName: name_3,
-                            type: type,
-                            isArray: isArray,
-                            isOptional: isOptional,
-                            shouldAddImport: shouldAddImport,
-                        });
-                        break;
+            for (var _b = 0, _c = element.children; _b < _c.length; _b++) {
+                var child = _c[_b];
+                var parsedElement = parseElement(child, optional);
+                if (parsedElement && parsedElement.properties) {
+                    for (var _d = 0, _e = parsedElement.properties; _d < _e.length; _d++) {
+                        var property = _e[_d];
+                        addSafeProperty(properties, property);
                     }
                 }
             }
+            return { properties: properties };
+        }
+        case "choice": {
+            logger_1.Logger.debug("Begin Choice");
+            var properties = [];
+            for (var _f = 0, _g = element.children; _f < _g.length; _f++) {
+                var choiceElement = _g[_f];
+                var parsedElement = parseElement(choiceElement, true);
+                if (parsedElement && parsedElement.properties) {
+                    for (var _h = 0, _j = parsedElement.properties; _h < _j.length; _h++) {
+                        var property = _j[_h];
+                        addSafeProperty(properties, property);
+                    }
+                }
+            }
+            logger_1.Logger.debug("End Choice");
             return { properties: properties };
         }
         case "attribute": {
@@ -486,12 +512,12 @@ function parseElement(element, optional) {
         case "simpleContent": {
             var attributes = [];
             var properties = [];
-            for (var _f = 0, _g = element.children; _f < _g.length; _f++) {
-                var child = _g[_f];
+            for (var _k = 0, _l = element.children; _k < _l.length; _k++) {
+                var child = _l[_k];
                 if (child instanceof elements_1.ExtensionElement) {
                     logger_1.Logger.debug("Begin Extension");
-                    for (var _h = 0, _j = child.children; _h < _j.length; _h++) {
-                        var grandChild = _j[_h];
+                    for (var _m = 0, _o = child.children; _m < _o.length; _m++) {
+                        var grandChild = _o[_m];
                         var parsedElement = parseElement(grandChild);
                         if (parsedElement) {
                             logger_1.Logger.debug("  element: ".concat(JSON.stringify(parsedElement)));

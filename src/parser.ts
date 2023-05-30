@@ -401,77 +401,105 @@ function parseSimpleType(
     };
 }
 
+function addSafeProperty(properties: DefinitionProperty[], property: DefinitionProperty) {
+    const existingProperty = properties.find((it) => it.name == property.name);
+    if (!existingProperty) properties.push(property);
+}
+
 function parseElement(element: Element, optional?: boolean): ParsedElement | undefined {
     switch (element.name) {
         case "annotation": {
             break;
         }
+        case "element": {
+            const properties: DefinitionProperty[] = [];
+
+            const name = element.$name;
+            const propName = changeCase(name, { pascalCase: true });
+
+            const minOccurs = (element as ElementElement).$minOccurs;
+            const maxOccurs = (element as ElementElement).$maxOccurs;
+            const isArray = maxOccurs && maxOccurs != "1";
+            const isOptional = optional || (!isArray && minOccurs == "0");
+            let type = (element as any).$type;
+
+            const nodeSoapType: string | undefined = getNodeSoapParsedType(type);
+            let shouldAddImport = true;
+            if (nodeSoapType) {
+                type = nodeSoapType;
+                shouldAddImport = false;
+            } else {
+                if (type) {
+                    type = changeCase(type, { pascalCase: true });
+                }
+            }
+
+            if (Logger.isDebug) {
+                const isArrayText = isArray ? `, isArray=true` : "";
+                const isOptionalText = isOptional ? `, isOptional=true` : "";
+                Logger.debug(`  Child name=${propName}, type=${type}${isOptionalText}${isArrayText}`);
+            }
+
+            switch (name) {
+                case "sequence": {
+                    Logger.debug("Begin nested sequence");
+                    const parsedElement = parseElement(element, false);
+                    if (parsedElement && parsedElement.properties) {
+                        for (const property of parsedElement.properties) {
+                            addSafeProperty(properties, property);
+                        }
+                    }
+                    Logger.debug("End nested sequence");
+                    break;
+                }
+
+                case "any": {
+                    break;
+                }
+                default: {
+                    properties.push({
+                        kind: "SCHEMA",
+                        name: propName,
+                        sourceName: name,
+                        type: type,
+                        isArray: isArray,
+                        isOptional: isOptional,
+                        shouldAddImport: shouldAddImport,
+                    });
+                    break;
+                }
+            }
+
+            return { properties: properties };
+        }
         case "sequence": {
             const properties: DefinitionProperty[] = [];
 
             for (const child of element.children) {
-                let name = child.name;
-                if (name == "element") {
-                    name = child.$name;
-                }
-                const propName = changeCase(name, { pascalCase: true });
-
-                const minOccurs = (child as ElementElement).$minOccurs;
-                const maxOccurs = (child as ElementElement).$maxOccurs;
-                const isArray = maxOccurs && maxOccurs != "1";
-                const isOptional = optional || (!isArray && minOccurs == "0");
-                let type = (child as any).$type;
-
-                const nodeSoapType: string | undefined = getNodeSoapParsedType(type);
-                let shouldAddImport = true;
-                if (nodeSoapType) {
-                    type = nodeSoapType;
-                    shouldAddImport = false;
-                } else {
-                    if (type) {
-                        type = changeCase(type, { pascalCase: true });
-                    }
-                }
-
-                if (Logger.isDebug) {
-                    const isArrayText = isArray ? `, isArray=true` : "";
-                    const isOptionalText = isOptional ? `, isOptional=true` : "";
-                    Logger.debug(`  Child name=${propName}, type=${type}${isOptionalText}${isArrayText}`);
-                }
-
-                switch (name) {
-                    case "choice": {
-                        Logger.debug("Begin Choice");
-
-                        for (const choiceElement of child.children) {
-                            const parsedElement = parseElement(choiceElement, true);
-                            if (parsedElement && parsedElement.properties) {
-                                for (const property of parsedElement.properties) {
-                                    properties.push(property);
-                                }
-                            }
-                        }
-                        Logger.debug("End Choice");
-
-                        break;
-                    }
-                    case "any": {
-                        break;
-                    }
-                    default: {
-                        properties.push({
-                            kind: "SCHEMA",
-                            name: propName,
-                            sourceName: name,
-                            type: type,
-                            isArray: isArray,
-                            isOptional: isOptional,
-                            shouldAddImport: shouldAddImport,
-                        });
-                        break;
+                const parsedElement = parseElement(child, optional);
+                if (parsedElement && parsedElement.properties) {
+                    for (const property of parsedElement.properties) {
+                        addSafeProperty(properties, property);
                     }
                 }
             }
+
+            return { properties: properties };
+        }
+        case "choice": {
+            Logger.debug("Begin Choice");
+
+            const properties: DefinitionProperty[] = [];
+
+            for (const choiceElement of element.children) {
+                const parsedElement = parseElement(choiceElement, true);
+                if (parsedElement && parsedElement.properties) {
+                    for (const property of parsedElement.properties) {
+                        addSafeProperty(properties, property);
+                    }
+                }
+            }
+            Logger.debug("End Choice");
 
             return { properties: properties };
         }
