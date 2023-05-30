@@ -141,17 +141,19 @@ function generateDefinitionFile(project, definition, defDir, stack, generated, o
         else if (prop.kind === "SCHEMA") {
             // Definition which is parsed from schema
             var type = prop.type;
-            if (simpleTypeDefinitions) {
-                var simpleTypeDefinition = simpleTypeDefinitions[type];
-                if (simpleTypeDefinition) {
-                    addSafeImport(definitionImports, "./".concat(simpleTypeDefinitionsName), prop.type);
+            if (prop.shouldAddImport) {
+                if (simpleTypeDefinitions) {
+                    var simpleTypeDefinition = simpleTypeDefinitions[type];
+                    if (simpleTypeDefinition) {
+                        addSafeImport(definitionImports, "./".concat(simpleTypeDefinitionsName), prop.type);
+                    }
+                    else {
+                        addSafeImport(definitionImports, "./".concat(prop.type), prop.type);
+                    }
                 }
                 else {
                     addSafeImport(definitionImports, "./".concat(prop.type), prop.type);
                 }
-            }
-            else {
-                addSafeImport(definitionImports, "./".concat(prop.type), prop.type);
             }
             definitionProperties.push(createProperty(prop.name, type, prop.isArray, prop.description, prop.isOptional));
         }
