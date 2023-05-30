@@ -164,7 +164,7 @@ function createDefinition(parsedWsdl, options, name, stack) {
         description: "",
         optional: false,
     };
-    parsedWsdl.definitions.push(definition); // Must be here to avoid name collision with `findNonCollisionDefinitionName` if sub-definition has same name
+    // parsedWsdl.definitions.push(definition); // Must be here to avoid name collision with `findNonCollisionDefinitionName` if sub-definition has same name
     return definition;
 }
 // TODO: Add logs
@@ -313,8 +313,9 @@ function parseWsdl(wsdlPath, options) {
 }
 exports.parseWsdl = parseWsdl;
 function parseComplexType(parsedWsdl, options, name, complexType, nameSpace) {
-    logger_1.Logger.debug("Parsing ComplexType name=".concat(name));
-    var definition = createDefinition(parsedWsdl, options, name, [nameSpace]);
+    var defName = (0, change_case_1.changeCase)(name, { pascalCase: true });
+    logger_1.Logger.debug("Parsing ComplexType name=".concat(defName));
+    var definition = createDefinition(parsedWsdl, options, defName, [nameSpace]);
     complexType.children.forEach(function (child) {
         var _a, _b;
         logger_1.Logger.debug("Parsing Element: ".concat(child.name));
@@ -408,6 +409,11 @@ function parseElement(element, optional) {
                 var nodeSoapType = getNodeSoapParsedType(type);
                 if (nodeSoapType) {
                     type = nodeSoapType;
+                }
+                else {
+                    if (type) {
+                        type = (0, change_case_1.changeCase)(type, { pascalCase: true });
+                    }
                 }
                 if (logger_1.Logger.isDebug) {
                     var isArrayText = isArray ? ", isArray=true" : "";

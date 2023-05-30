@@ -307,9 +307,11 @@ function parseComplexType(
     complexType: ComplexTypeElement,
     nameSpace: string
 ): Definition {
-    Logger.debug(`Parsing ComplexType name=${name}`);
+    const defName = changeCase(name, { pascalCase: true });
 
-    const definition = createDefinition(parsedWsdl, options, name, [nameSpace]);
+    Logger.debug(`Parsing ComplexType name=${defName}`);
+
+    const definition = createDefinition(parsedWsdl, options, defName, [nameSpace]);
 
     complexType.children.forEach((child) => {
         Logger.debug(`Parsing Element: ${child.name}`);
@@ -419,6 +421,10 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
                 const nodeSoapType: string | undefined = getNodeSoapParsedType(type);
                 if (nodeSoapType) {
                     type = nodeSoapType;
+                } else {
+                    if (type) {
+                        type = changeCase(type, { pascalCase: true });
+                    }
                 }
 
                 if (Logger.isDebug) {
