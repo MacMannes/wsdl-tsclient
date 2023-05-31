@@ -82,6 +82,7 @@ var logger_1 = require("./utils/logger");
 var defaultOptions = {
     modelNamePreffix: "",
     modelNameSuffix: "",
+    convertCase: true,
     maxRecursiveDefinitionName: 64,
 };
 /* eslint-disable prettier/prettier */
@@ -144,7 +145,7 @@ var NODE_SOAP_PARSED_TYPES = Object.entries({
  * @param stack definitions stack of path to current subdefinition (immutable)
  */
 function createDefinition(parsedWsdl, options, name, stack) {
-    var defName = (0, change_case_1.changeCase)(name, { pascalCase: true });
+    var defName = (0, change_case_1.changeCase)(name, options, { pascalCase: true });
     logger_1.Logger.debug("Creating Definition ".concat(stack.join("."), ".").concat(name));
     var nonCollisionDefName;
     try {
@@ -156,7 +157,7 @@ function createDefinition(parsedWsdl, options, name, stack) {
         throw e;
     }
     var definition = {
-        name: "".concat(options.modelNamePreffix).concat((0, change_case_1.changeCase)(nonCollisionDefName, { pascalCase: true })).concat(options.modelNameSuffix),
+        name: "".concat(options.modelNamePreffix).concat((0, change_case_1.changeCase)(nonCollisionDefName, options, { pascalCase: true })).concat(options.modelNameSuffix),
         sourceName: name,
         docs: [name],
         properties: [],
@@ -183,7 +184,6 @@ function parseWsdl(wsdlPath, options) {
                         namespaceArrayElements: false,
                         ignoredNamespaces: ["tns", "targetNamespace", "typeNamespace"],
                     }, function (err, wsdl) {
-                        var _a, _b, _c;
                         if (err) {
                             return reject(err);
                         }
@@ -192,7 +192,9 @@ function parseWsdl(wsdlPath, options) {
                         }
                         var parsedWsdl = new parsed_wsdl_1.ParsedWsdl({ maxStack: options.maxRecursiveDefinitionName });
                         var filename = path.basename(wsdlPath);
-                        parsedWsdl.name = (0, change_case_1.changeCase)((0, file_1.stripExtension)(filename), {
+                        // We always want to convert the case of the filenames
+                        var fileOptions = __assign(__assign({}, mergedOptions), { convertCase: true });
+                        parsedWsdl.name = (0, change_case_1.changeCase)((0, file_1.stripExtension)(filename), fileOptions, {
                             pascalCase: true,
                         });
                         parsedWsdl.wsdlFilename = path.basename(filename);
@@ -201,20 +203,20 @@ function parseWsdl(wsdlPath, options) {
                         var allMethods = [];
                         var allPorts = [];
                         var services = [];
-                        for (var _i = 0, _d = Object.entries(wsdl.definitions.services); _i < _d.length; _i++) {
-                            var _e = _d[_i], serviceName = _e[0], service = _e[1];
+                        for (var _i = 0, _a = Object.entries(wsdl.definitions.services); _i < _a.length; _i++) {
+                            var _b = _a[_i], serviceName = _b[0], service = _b[1];
                             logger_1.Logger.debug("Parsing Service ".concat(serviceName));
                             var servicePorts = []; // TODO: Convert to Array
-                            for (var _f = 0, _g = Object.entries(service.ports); _f < _g.length; _f++) {
-                                var _h = _g[_f], portName = _h[0], port = _h[1];
+                            for (var _c = 0, _d = Object.entries(service.ports); _c < _d.length; _c++) {
+                                var _e = _d[_c], portName = _e[0], port = _e[1];
                                 logger_1.Logger.debug("Parsing Port ".concat(portName));
                                 var portMethods = [];
-                                for (var _j = 0, _k = Object.entries(port.binding.methods); _j < _k.length; _j++) {
-                                    var _l = _k[_j], methodName = _l[0], method = _l[1];
+                                for (var _f = 0, _g = Object.entries(port.binding.methods); _f < _g.length; _f++) {
+                                    var _h = _g[_f], methodName = _h[0], method = _h[1];
                                     logger_1.Logger.debug("Parsing Method ".concat(methodName));
                                     // TODO: Deduplicate code below by refactoring it to external function. Is it even possible ?
                                     var paramName = "request";
-                                    var inputDefinition = null; // default type
+                                    var inputType = null; // default type
                                     if (method.input) {
                                         logger_1.Logger.debug("Parsing Method ".concat(methodName, ".input"));
                                         if (method.input.$name) {
@@ -223,57 +225,43 @@ function parseWsdl(wsdlPath, options) {
                                         var inputMessage = wsdl.definitions.messages[method.input.$name];
                                         if (inputMessage.element) {
                                             logger_1.Logger.debug("Handling ".concat(methodName, ".input.element"));
-                                            // TODO: if `$type` not defined, inline type into function declaration (do not create definition file) - wsimport
-                                            var typeName = (_a = inputMessage.element.$type) !== null && _a !== void 0 ? _a : inputMessage.element.$name;
-                                            var type = parsedWsdl.findDefinition((_b = inputMessage.element.$type) !== null && _b !== void 0 ? _b : inputMessage.element.$name);
-                                            inputDefinition = type
-                                                ? type
-                                                : createDefinition(parsedWsdl, mergedOptions, typeName, [typeName]);
+                                            inputType = getXmlType(inputMessage.element.$name, inputMessage.element.$type);
                                         }
                                         else if (inputMessage.parts) {
                                             logger_1.Logger.debug("Handling ".concat(methodName, ".input.parts"));
-                                            var type = parsedWsdl.findDefinition(paramName);
-                                            inputDefinition = type
-                                                ? type
-                                                : createDefinition(parsedWsdl, mergedOptions, paramName, [paramName]);
+                                            inputType = getXmlType(paramName);
                                         }
                                         else {
                                             logger_1.Logger.debug("Method '".concat(serviceName, ".").concat(portName, ".").concat(methodName, "' doesn't have any input defined"));
                                         }
                                     }
-                                    var outputDefinition = null; // default type, `{}` or `unknown` ?
+                                    var outputType = null; // default type
                                     if (method.output) {
                                         logger_1.Logger.debug("Parsing Method ".concat(methodName, ".output"));
                                         var outputMessage = wsdl.definitions.messages[method.output.$name];
                                         if (outputMessage.element) {
-                                            // TODO: if `$type` not defined, inline type into function declaration (do not create definition file) - wsimport
-                                            var typeName = (_c = outputMessage.element.$type) !== null && _c !== void 0 ? _c : outputMessage.element.$name;
-                                            var type = parsedWsdl.findDefinition(typeName);
-                                            outputDefinition = type
-                                                ? type
-                                                : createDefinition(parsedWsdl, mergedOptions, typeName, [typeName]);
+                                            outputType = getXmlType(outputMessage.element.$name, outputMessage.element.$type);
                                         }
                                         else {
-                                            var type = parsedWsdl.findDefinition(paramName);
-                                            outputDefinition = type
-                                                ? type
-                                                : createDefinition(parsedWsdl, mergedOptions, paramName, [paramName]);
+                                            outputType = getXmlType(paramName);
                                         }
                                     }
-                                    var camelParamName = (0, change_case_1.changeCase)(paramName);
+                                    // We always want to convert the case of the param names
+                                    var camelOptions = __assign(__assign({}, mergedOptions), { convertCase: true });
+                                    var camelParamName = (0, change_case_1.changeCase)(paramName, camelOptions, { pascalCase: false });
                                     var portMethod = {
                                         name: methodName,
                                         paramName: javascript_1.reservedKeywords.includes(camelParamName)
                                             ? "".concat(camelParamName, "Param")
                                             : camelParamName,
-                                        paramDefinition: inputDefinition,
-                                        returnDefinition: outputDefinition, // TODO: Use string from generated definition files
+                                        paramType: inputType,
+                                        returnType: outputType,
                                     };
                                     portMethods.push(portMethod);
                                     allMethods.push(portMethod);
                                 }
                                 var servicePort = {
-                                    name: (0, change_case_1.changeCase)(portName, { pascalCase: true }),
+                                    name: (0, change_case_1.changeCase)(portName, mergedOptions, { pascalCase: true }),
                                     sourceName: portName,
                                     methods: portMethods,
                                 };
@@ -281,7 +269,7 @@ function parseWsdl(wsdlPath, options) {
                                 allPorts.push(servicePort);
                             } // End of Port cycle
                             services.push({
-                                name: (0, change_case_1.changeCase)(serviceName, { pascalCase: true }),
+                                name: (0, change_case_1.changeCase)(serviceName, mergedOptions, { pascalCase: true }),
                                 sourceName: serviceName,
                                 ports: servicePorts,
                             });
@@ -290,18 +278,18 @@ function parseWsdl(wsdlPath, options) {
                         parsedWsdl.ports = allPorts;
                         parsedWsdl.definitions = [];
                         // Parse Schemas
-                        for (var _m = 0, _o = Object.entries(wsdl.definitions.schemas); _m < _o.length; _m++) {
-                            var _p = _o[_m], nameSpace = _p[0], schemaElement = _p[1];
+                        for (var _j = 0, _k = Object.entries(wsdl.definitions.schemas); _j < _k.length; _j++) {
+                            var _l = _k[_j], nameSpace = _l[0], schemaElement = _l[1];
                             logger_1.Logger.debug("Parsing NameSpace: ".concat(nameSpace, "}"));
                             // Parse ComplexTypes
-                            for (var _q = 0, _r = Object.entries(schemaElement.complexTypes); _q < _r.length; _q++) {
-                                var _s = _r[_q], name_1 = _s[0], complexType = _s[1];
+                            for (var _m = 0, _o = Object.entries(schemaElement.complexTypes); _m < _o.length; _m++) {
+                                var _p = _o[_m], name_1 = _p[0], complexType = _p[1];
                                 var definition = parseComplexType(parsedWsdl, mergedOptions, name_1, complexType, nameSpace);
                                 parsedWsdl.definitions.push(definition);
                             }
                             // Parse SimpleTypes
-                            for (var _t = 0, _u = Object.entries(schemaElement.types); _t < _u.length; _t++) {
-                                var _v = _u[_t], name_2 = _v[0], simpleType = _v[1];
+                            for (var _q = 0, _r = Object.entries(schemaElement.types); _q < _r.length; _q++) {
+                                var _s = _r[_q], name_2 = _s[0], simpleType = _s[1];
                                 var simpleTypeDefinition = parseSimpleType(parsedWsdl, mergedOptions, name_2, simpleType);
                                 parsedWsdl.simpleTypeDefinitions[simpleTypeDefinition.name] = simpleTypeDefinition;
                             }
@@ -314,13 +302,13 @@ function parseWsdl(wsdlPath, options) {
 }
 exports.parseWsdl = parseWsdl;
 function parseComplexType(parsedWsdl, options, name, complexType, nameSpace) {
-    var defName = (0, change_case_1.changeCase)(name, { pascalCase: true });
+    var defName = (0, change_case_1.changeCase)(name, options, { pascalCase: true });
     logger_1.Logger.debug("Parsing ComplexType name=".concat(defName));
     var definition = createDefinition(parsedWsdl, options, defName, [nameSpace]);
     complexType.children.forEach(function (child) {
         var _a, _b;
         logger_1.Logger.debug("Parsing Element: ".concat(child.name));
-        var element = parseElement(child);
+        var element = parseElement(child, options);
         if (element) {
             if (element.properties) {
                 for (var _i = 0, _c = element.properties; _i < _c.length; _i++) {
@@ -354,7 +342,7 @@ function getNodeSoapParsedType(type) {
     return NODE_SOAP_PARSED_TYPES[lookupType];
 }
 function parseSimpleType(parsedWsdl, options, name, simpleType) {
-    var defName = (0, change_case_1.changeCase)(name, { pascalCase: true });
+    var defName = (0, change_case_1.changeCase)(name, options, { pascalCase: true });
     var type = "string";
     var enumerationValues = [];
     simpleType.children.forEach(function (child) {
@@ -378,7 +366,7 @@ function parseSimpleType(parsedWsdl, options, name, simpleType) {
     }
     else {
         if (type) {
-            type = (0, change_case_1.changeCase)(type, { pascalCase: true });
+            type = (0, change_case_1.changeCase)(type, options, { pascalCase: true });
         }
     }
     if (logger_1.Logger.isDebug) {
@@ -400,7 +388,7 @@ function addSafeProperty(properties, property) {
     if (!existingProperty)
         properties.push(property);
 }
-function parseElement(element, optional) {
+function parseElement(element, options, optional) {
     switch (element.name) {
         case "annotation": {
             break;
@@ -408,7 +396,7 @@ function parseElement(element, optional) {
         case "element": {
             var properties = [];
             var name_3 = element.$name;
-            var propName = (0, change_case_1.changeCase)(name_3, { pascalCase: true });
+            var propName = (0, change_case_1.changeCase)(name_3, options, { pascalCase: true });
             var minOccurs = element.$minOccurs;
             var maxOccurs = element.$maxOccurs;
             var isArray = maxOccurs && maxOccurs != "1";
@@ -422,7 +410,7 @@ function parseElement(element, optional) {
             }
             else {
                 if (type) {
-                    type = (0, change_case_1.changeCase)(type, { pascalCase: true });
+                    type = (0, change_case_1.changeCase)(type, options, { pascalCase: true });
                 }
             }
             if (logger_1.Logger.isDebug) {
@@ -433,7 +421,7 @@ function parseElement(element, optional) {
             switch (name_3) {
                 case "sequence": {
                     logger_1.Logger.debug("Begin nested sequence");
-                    var parsedElement = parseElement(element, false);
+                    var parsedElement = parseElement(element, options, false);
                     if (parsedElement && parsedElement.properties) {
                         for (var _i = 0, _a = parsedElement.properties; _i < _a.length; _i++) {
                             var property = _a[_i];
@@ -448,7 +436,6 @@ function parseElement(element, optional) {
                 }
                 default: {
                     properties.push({
-                        kind: "SCHEMA",
                         name: propName,
                         sourceName: name_3,
                         type: type,
@@ -465,7 +452,7 @@ function parseElement(element, optional) {
             var properties = [];
             for (var _b = 0, _c = element.children; _b < _c.length; _b++) {
                 var child = _c[_b];
-                var parsedElement = parseElement(child, optional);
+                var parsedElement = parseElement(child, options, optional);
                 if (parsedElement && parsedElement.properties) {
                     for (var _d = 0, _e = parsedElement.properties; _d < _e.length; _d++) {
                         var property = _e[_d];
@@ -480,7 +467,7 @@ function parseElement(element, optional) {
             var properties = [];
             for (var _f = 0, _g = element.children; _f < _g.length; _f++) {
                 var choiceElement = _g[_f];
-                var parsedElement = parseElement(choiceElement, true);
+                var parsedElement = parseElement(choiceElement, options, true);
                 if (parsedElement && parsedElement.properties) {
                     for (var _h = 0, _j = parsedElement.properties; _h < _j.length; _h++) {
                         var property = _j[_h];
@@ -518,7 +505,7 @@ function parseElement(element, optional) {
                     logger_1.Logger.debug("Begin Extension");
                     for (var _m = 0, _o = child.children; _m < _o.length; _m++) {
                         var grandChild = _o[_m];
-                        var parsedElement = parseElement(grandChild);
+                        var parsedElement = parseElement(grandChild, options);
                         if (parsedElement) {
                             logger_1.Logger.debug("  element: ".concat(JSON.stringify(parsedElement)));
                             if (parsedElement.attribute) {
@@ -531,7 +518,6 @@ function parseElement(element, optional) {
             }
             if (properties.length == 0) {
                 properties.push({
-                    kind: "SCHEMA",
                     name: "value",
                     sourceName: "value",
                     type: "string",
@@ -549,5 +535,17 @@ function parseElement(element, optional) {
         }
     }
     return undefined;
+}
+function getXmlType(name, type) {
+    if (type) {
+        var parts = type.split(":");
+        if (parts.length == 2) {
+            return { name: name, nameSpace: parts[0], type: parts[1] };
+        }
+        else {
+            return { name: name, type: type };
+        }
+    }
+    return { name: name, type: "any" };
 }
 //# sourceMappingURL=parser.js.map

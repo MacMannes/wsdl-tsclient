@@ -5,12 +5,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.changeCase = void 0;
 var camelcase_1 = __importDefault(require("camelcase"));
-function changeCase(input, options) {
-    var inputCopy = input;
-    if (!(options === null || options === void 0 ? void 0 : options.pascalCase)) {
-        return inputCopy.replace(/\./g, ""); // need to remove dots in the input string, otherwise, code generation fails
+function changeCase(input, options, camelcaseOptions) {
+    if (options.convertCase) {
+        var inputCopy = input;
+        if (!(camelcaseOptions === null || camelcaseOptions === void 0 ? void 0 : camelcaseOptions.pascalCase)) {
+            return inputCopy.replace(/\./g, ""); // need to remove dots in the input string, otherwise, code generation fails
+        }
+        return (0, camelcase_1.default)(inputCopy, camelcaseOptions);
     }
-    return (0, camelcase_1.default)(inputCopy, options);
+    return input;
 }
 exports.changeCase = changeCase;
 //# sourceMappingURL=change-case.js.map

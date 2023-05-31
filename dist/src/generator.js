@@ -46,15 +46,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
-    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
-        if (ar || !(i in from)) {
-            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
-            ar[i] = from[i];
-        }
-    }
-    return to.concat(ar || Array.prototype.slice.call(from));
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -134,41 +125,22 @@ function generateDefinitionFile(project, definition, defDir, stack, generated, o
                     break;
             }
         }
-        if (prop.kind === "PRIMITIVE") {
-            // e.g. string
-            definitionProperties.push(createProperty(prop.name, prop.type, prop.isArray, prop.description, prop.isOptional));
-        }
-        else if (prop.kind === "SCHEMA") {
-            // Definition which is parsed from schema
-            var type = prop.type;
-            if (prop.shouldAddImport) {
-                if (simpleTypeDefinitions) {
-                    var simpleTypeDefinition = simpleTypeDefinitions[type];
-                    if (simpleTypeDefinition) {
-                        addSafeImport(definitionImports, "./".concat(simpleTypeDefinitionsName), prop.type);
-                    }
-                    else {
-                        addSafeImport(definitionImports, "./".concat(prop.type), prop.type);
-                    }
+        var type = prop.type;
+        if (prop.shouldAddImport) {
+            if (simpleTypeDefinitions) {
+                var simpleTypeDefinition = simpleTypeDefinitions[type];
+                if (simpleTypeDefinition) {
+                    addSafeImport(definitionImports, "./".concat(simpleTypeDefinitionsName), prop.type);
                 }
                 else {
                     addSafeImport(definitionImports, "./".concat(prop.type), prop.type);
                 }
             }
-            definitionProperties.push(createProperty(prop.name, type, prop.isArray, prop.description, prop.isOptional));
-        }
-        else if (prop.kind === "REFERENCE") {
-            // e.g. Items
-            if (!generated.includes(prop.ref)) {
-                // Wasn't generated yet
-                generateDefinitionFile(project, prop.ref, defDir, __spreadArray(__spreadArray([], stack, true), [prop.ref.name], false), generated, options);
+            else {
+                addSafeImport(definitionImports, "./".concat(prop.type), prop.type);
             }
-            // If a property is of the same type as its parent type, don't add import
-            if (prop.ref.name !== definition.name) {
-                addSafeImport(definitionImports, "./".concat(prop.ref.name), prop.ref.name);
-            }
-            definitionProperties.push(createProperty(prop.name, prop.ref.name, prop.isArray, prop.sourceName, prop.isOptional));
         }
+        definitionProperties.push(createProperty(prop.name, type, prop.isArray, prop.description, prop.isOptional));
     }
     if (definition.attributes.length > 0) {
         var attributesName = "".concat(defName, "Attributes");
@@ -260,22 +232,17 @@ function generate(parsedWsdl, outDir, options) {
                     portFileMethods = [];
                     for (_d = 0, _e = port.methods; _d < _e.length; _d++) {
                         method = _e[_d];
-                        // TODO: Deduplicate PortImports
-                        if (method.paramDefinition !== null) {
-                            if (!allDefinitions.includes(method.paramDefinition)) {
-                                // Definition is not generated
-                                generateDefinitionFile(project, method.paramDefinition, defDir, [method.paramDefinition.name], allDefinitions, mergedOptions);
-                                addSafeImport(clientImports, "./definitions/".concat(method.paramDefinition.name), method.paramDefinition.name);
+                        if (method.paramType !== null) {
+                            if (method.paramType.type != "any") {
+                                addSafeImport(clientImports, "./definitions/".concat(method.paramType.type), method.paramType.type);
+                                addSafeImport(portImports, "../definitions/".concat(method.paramType.type), method.paramType.type);
                             }
-                            addSafeImport(portImports, "../definitions/".concat(method.paramDefinition.name), method.paramDefinition.name);
                         }
-                        if (method.returnDefinition !== null) {
-                            if (!allDefinitions.includes(method.returnDefinition)) {
-                                // Definition is not generated
-                                generateDefinitionFile(project, method.returnDefinition, defDir, [method.returnDefinition.name], allDefinitions, mergedOptions);
-                                addSafeImport(clientImports, "./definitions/".concat(method.returnDefinition.name), method.returnDefinition.name);
+                        if (method.returnType !== null) {
+                            if (method.returnType.type != "any") {
+                                addSafeImport(clientImports, "./definitions/".concat(method.returnType.type), method.returnType.type);
+                                addSafeImport(portImports, "../definitions/".concat(method.returnType.type), method.returnType.type);
                             }
-                            addSafeImport(portImports, "../definitions/".concat(method.returnDefinition.name), method.returnDefinition.name);
                         }
                         // TODO: Deduplicate PortMethods
                         allMethods.push(method);
@@ -284,11 +251,11 @@ function generate(parsedWsdl, outDir, options) {
                             parameters: [
                                 {
                                     name: (0, camelcase_1.default)(method.paramName),
-                                    type: method.paramDefinition ? method.paramDefinition.name : "{}",
+                                    type: method.paramType ? method.paramType.type : "{}",
                                 },
                                 {
                                     name: "callback",
-                                    type: "(err: any, result: ".concat(method.returnDefinition ? method.returnDefinition.name : "unknown", ", rawResponse: any, soapHeader: any, rawRequest: any) => void"), // TODO: Use ts-morph to generate proper type
+                                    type: "(err: any, result: ".concat(method.returnType ? method.returnType.type : "unknown", ", rawResponse: any, soapHeader: any, rawRequest: any) => void"), // TODO: Use ts-morph to generate proper type
                                 },
                             ],
                             returnType: "void",
@@ -400,10 +367,10 @@ function generate(parsedWsdl, outDir, options) {
                                 parameters: [
                                     {
                                         name: (0, camelcase_1.default)(method.paramName),
-                                        type: method.paramDefinition ? method.paramDefinition.name : "{}",
+                                        type: method.paramType ? method.paramType.type : "{}",
                                     },
                                 ],
-                                returnType: "Promise<[result: ".concat(method.returnDefinition ? method.returnDefinition.name : "unknown", ", rawResponse: any, soapHeader: any, rawRequest: any]>"),
+                                returnType: "Promise<[result: ".concat(method.returnType ? method.returnType.type : "unknown", ", rawResponse: any, soapHeader: any, rawRequest: any]>"),
                             }); }),
                         },
                     ]);

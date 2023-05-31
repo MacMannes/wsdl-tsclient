@@ -1,7 +1,8 @@
 import { ParsedWsdl } from "./models/parsed-wsdl";
-interface ParserOptions {
+export interface ParserOptions {
     modelNamePreffix: string;
     modelNameSuffix: string;
+    convertCase: boolean;
     maxRecursiveDefinitionName: number;
 }
 /**
@@ -9,5 +10,4 @@ interface ParserOptions {
  * @param wsdlPath - path or url to wsdl file
  */
 export declare function parseWsdl(wsdlPath: string, options: Partial<ParserOptions>): Promise<ParsedWsdl>;
-export {};
 //# sourceMappingURL=parser.d.ts.map

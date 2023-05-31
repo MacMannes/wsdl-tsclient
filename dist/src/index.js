@@ -70,6 +70,7 @@ exports.defaultOptions = {
     modelNamePreffix: "",
     modelNameSuffix: "",
     caseInsensitiveNames: false,
+    convertCase: true,
     maxRecursiveDefinitionName: 64,
     modelPropertyNaming: null,
     //

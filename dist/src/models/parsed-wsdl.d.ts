@@ -1,25 +1,17 @@
-export declare type DefinitionProperty = {
+export interface XmlType {
+    name: string;
+    type: string | any;
+    nameSpace?: string;
+}
+export interface DefinitionProperty {
     name: string;
     sourceName: string;
     description?: string;
-    kind: "PRIMITIVE" | "SCHEMA";
     isArray?: boolean;
     isOptional?: boolean;
     type: string;
     shouldAddImport: boolean;
-} | {
-    name: string;
-    sourceName: string;
-    description?: string;
-    /**
-     * This definition only reference another definition instead of primitive type
-     * @description helps to avoid circular references
-     */
-    kind: "REFERENCE";
-    isArray?: boolean;
-    isOptional?: boolean;
-    ref: Definition;
-};
+}
 export interface DefinitionAttribute {
     name: string;
     type: string;
@@ -62,9 +54,9 @@ export interface Method {
     /** First param name (InputMessage) */
     paramName: string;
     /** First param type (InputMessage) */
-    paramDefinition: null | Definition;
+    paramType: null | XmlType;
     /** Result type (OutputMessage) */
-    returnDefinition: null | Definition;
+    returnType: null | XmlType;
 }
 export interface Port {
     /** Will be used as name of generated Port's interface */
