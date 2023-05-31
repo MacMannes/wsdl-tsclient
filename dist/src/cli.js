@@ -135,7 +135,7 @@ if (conf.maxRecursiveDefinitionName || conf.maxRecursiveDefinitionName == 0) {
 if (conf.caseInsensitiveNames) {
     options.caseInsensitiveNames = conf.caseInsensitiveNames;
 }
-if (conf.convertCase) {
+if (conf.convertCase != undefined) {
     options.convertCase = conf.convertCase;
 }
 logger_1.Logger.debug("Options");

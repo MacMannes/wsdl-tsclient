@@ -110,7 +110,7 @@ if (conf.caseInsensitiveNames) {
     options.caseInsensitiveNames = conf.caseInsensitiveNames;
 }
 
-if (conf.convertCase) {
+if (conf.convertCase != undefined) {
     options.convertCase = conf.convertCase;
 }
 
