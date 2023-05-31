@@ -10,7 +10,7 @@ describe("parseAndGenerate()", function () {
         const input = `./test/resources/${target}.wsdl`;
         const outDir = "./test/generated/ppv";
 
-        await parseAndGenerate(input, outDir);
+        await parseAndGenerate(input, outDir, { convertCase: false });
     });
 });
 

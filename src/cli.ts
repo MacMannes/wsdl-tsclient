@@ -35,6 +35,10 @@ const conf = yargs(process.argv.slice(2))
         type: "boolean",
         description: "Case-insensitive name while parsing definition names",
     })
+    .option("convertCase", {
+        type: "boolean",
+        description: "Convert definition names to Pascal/Camel case",
+    })
     .option("maxRecursiveDefinitionName", {
         type: "number",
         description: "Maximum count of definition's with same name but increased suffix. Will throw an error if exceed",
@@ -104,6 +108,10 @@ if (conf.maxRecursiveDefinitionName || conf.maxRecursiveDefinitionName == 0) {
 
 if (conf.caseInsensitiveNames) {
     options.caseInsensitiveNames = conf.caseInsensitiveNames;
+}
+
+if (conf.convertToPascalCase) {
+    options.convertCase = conf.convertCase;
 }
 
 Logger.debug("Options");

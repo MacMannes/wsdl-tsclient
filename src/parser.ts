@@ -23,15 +23,17 @@ import { stripExtension } from "./utils/file";
 import { reservedKeywords } from "./utils/javascript";
 import { Logger } from "./utils/logger";
 
-interface ParserOptions {
+export interface ParserOptions {
     modelNamePreffix: string;
     modelNameSuffix: string;
+    convertCase: boolean;
     maxRecursiveDefinitionName: number;
 }
 
 const defaultOptions: ParserOptions = {
     modelNamePreffix: "",
     modelNameSuffix: "",
+    convertCase: true,
     maxRecursiveDefinitionName: 64,
 };
 
@@ -108,7 +110,7 @@ const NODE_SOAP_PARSED_TYPES: Record<string, string> = Object.entries({
  * @param stack definitions stack of path to current subdefinition (immutable)
  */
 function createDefinition(parsedWsdl: ParsedWsdl, options: ParserOptions, name: string, stack: string[]): Definition {
-    const defName = changeCase(name, { pascalCase: true });
+    const defName = changeCase(name, options, { pascalCase: true });
 
     Logger.debug(`Creating Definition ${stack.join(".")}.${name}`);
 
@@ -121,7 +123,7 @@ function createDefinition(parsedWsdl: ParsedWsdl, options: ParserOptions, name: 
         throw e;
     }
     const definition: Definition = {
-        name: `${options.modelNamePreffix}${changeCase(nonCollisionDefName, { pascalCase: true })}${
+        name: `${options.modelNamePreffix}${changeCase(nonCollisionDefName, options, { pascalCase: true })}${
             options.modelNameSuffix
         }`,
         sourceName: name,
@@ -165,7 +167,12 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
 
                 const parsedWsdl = new ParsedWsdl({ maxStack: options.maxRecursiveDefinitionName });
                 const filename = path.basename(wsdlPath);
-                parsedWsdl.name = changeCase(stripExtension(filename), {
+                // We always want to convert the case of the filenames
+                const fileOptions = {
+                    ...mergedOptions,
+                    convertCase: true,
+                };
+                parsedWsdl.name = changeCase(stripExtension(filename), fileOptions, {
                     pascalCase: true,
                 });
                 parsedWsdl.wsdlFilename = path.basename(filename);
@@ -240,7 +247,12 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                 }
                             }
 
-                            const camelParamName = changeCase(paramName);
+                            // We always want to convert the case of the param names
+                            const camelOptions = {
+                                ...mergedOptions,
+                                convertCase: true,
+                            };
+                            const camelParamName = changeCase(paramName, camelOptions, { pascalCase: false });
                             const portMethod: Method = {
                                 name: methodName,
                                 paramName: reservedKeywords.includes(camelParamName)
@@ -254,7 +266,7 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                         }
 
                         const servicePort: Port = {
-                            name: changeCase(portName, { pascalCase: true }),
+                            name: changeCase(portName, mergedOptions, { pascalCase: true }),
                             sourceName: portName,
                             methods: portMethods,
                         };
@@ -263,7 +275,7 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                     } // End of Port cycle
 
                     services.push({
-                        name: changeCase(serviceName, { pascalCase: true }),
+                        name: changeCase(serviceName, mergedOptions, { pascalCase: true }),
                         sourceName: serviceName,
                         ports: servicePorts,
                     });
@@ -303,7 +315,7 @@ function parseComplexType(
     complexType: ComplexTypeElement,
     nameSpace: string
 ): Definition {
-    const defName = changeCase(name, { pascalCase: true });
+    const defName = changeCase(name, options, { pascalCase: true });
 
     Logger.debug(`Parsing ComplexType name=${defName}`);
 
@@ -312,7 +324,7 @@ function parseComplexType(
     complexType.children.forEach((child) => {
         Logger.debug(`Parsing Element: ${child.name}`);
 
-        const element = parseElement(child);
+        const element = parseElement(child, options);
         if (element) {
             if (element.properties) {
                 for (const property of element.properties) {
@@ -353,7 +365,7 @@ function parseSimpleType(
     name: string,
     simpleType: SimpleTypeElement
 ): SimpleTypeDefinition {
-    const defName = changeCase(name, { pascalCase: true });
+    const defName = changeCase(name, options, { pascalCase: true });
 
     let type = "string";
     const enumerationValues: string[] = [];
@@ -380,7 +392,7 @@ function parseSimpleType(
         shouldAddImport = false;
     } else {
         if (type) {
-            type = changeCase(type, { pascalCase: true });
+            type = changeCase(type, options, { pascalCase: true });
         }
     }
 
@@ -406,7 +418,7 @@ function addSafeProperty(properties: DefinitionProperty[], property: DefinitionP
     if (!existingProperty) properties.push(property);
 }
 
-function parseElement(element: Element, optional?: boolean): ParsedElement | undefined {
+function parseElement(element: Element, options: ParserOptions, optional?: boolean): ParsedElement | undefined {
     switch (element.name) {
         case "annotation": {
             break;
@@ -415,7 +427,7 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
             const properties: DefinitionProperty[] = [];
 
             const name = element.$name;
-            const propName = changeCase(name, { pascalCase: true });
+            const propName = changeCase(name, options, { pascalCase: true });
 
             const minOccurs = (element as ElementElement).$minOccurs;
             const maxOccurs = (element as ElementElement).$maxOccurs;
@@ -430,7 +442,7 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
                 shouldAddImport = false;
             } else {
                 if (type) {
-                    type = changeCase(type, { pascalCase: true });
+                    type = changeCase(type, options, { pascalCase: true });
                 }
             }
 
@@ -443,7 +455,7 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
             switch (name) {
                 case "sequence": {
                     Logger.debug("Begin nested sequence");
-                    const parsedElement = parseElement(element, false);
+                    const parsedElement = parseElement(element, options, false);
                     if (parsedElement && parsedElement.properties) {
                         for (const property of parsedElement.properties) {
                             addSafeProperty(properties, property);
@@ -476,7 +488,7 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
             const properties: DefinitionProperty[] = [];
 
             for (const child of element.children) {
-                const parsedElement = parseElement(child, optional);
+                const parsedElement = parseElement(child, options, optional);
                 if (parsedElement && parsedElement.properties) {
                     for (const property of parsedElement.properties) {
                         addSafeProperty(properties, property);
@@ -492,7 +504,7 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
             const properties: DefinitionProperty[] = [];
 
             for (const choiceElement of element.children) {
-                const parsedElement = parseElement(choiceElement, true);
+                const parsedElement = parseElement(choiceElement, options, true);
                 if (parsedElement && parsedElement.properties) {
                     for (const property of parsedElement.properties) {
                         addSafeProperty(properties, property);
@@ -535,7 +547,7 @@ function parseElement(element: Element, optional?: boolean): ParsedElement | und
                 if (child instanceof ExtensionElement) {
                     Logger.debug("Begin Extension");
                     for (const grandChild of child.children) {
-                        const parsedElement = parseElement(grandChild);
+                        const parsedElement = parseElement(grandChild, options);
                         if (parsedElement) {
                             Logger.debug(`  element: ${JSON.stringify(parsedElement)}`);
                             if (parsedElement.attribute) {

@@ -33,6 +33,11 @@ export interface Options {
      */
     caseInsensitiveNames: boolean;
     /**
+     * Convert definition names to Camel/Pascal case
+     * @default true
+     */
+    convertCase: boolean;
+    /**
      * Maximum count of definition's with same name but increased suffix. Will throw an error if exceed
      * @default 64
      */
@@ -60,6 +65,7 @@ export const defaultOptions: Options = {
     modelNamePreffix: "",
     modelNameSuffix: "",
     caseInsensitiveNames: false,
+    convertCase: true,
     maxRecursiveDefinitionName: 64,
     modelPropertyNaming: null,
     //
