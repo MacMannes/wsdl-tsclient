@@ -17,6 +17,7 @@ import {
     Port,
     Service,
     SimpleTypeDefinition,
+    XmlType,
 } from "./models/parsed-wsdl";
 import { changeCase } from "./utils/change-case";
 import { stripExtension } from "./utils/file";
@@ -196,7 +197,7 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
 
                             // TODO: Deduplicate code below by refactoring it to external function. Is it even possible ?
                             let paramName = "request";
-                            let inputDefinition: Definition = null; // default type
+                            let inputType: XmlType = null; // default type
 
                             if (method.input) {
                                 Logger.debug(`Parsing Method ${methodName}.input`);
@@ -206,21 +207,10 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                 const inputMessage = wsdl.definitions.messages[method.input.$name];
                                 if (inputMessage.element) {
                                     Logger.debug(`Handling ${methodName}.input.element`);
-
-                                    // TODO: if `$type` not defined, inline type into function declaration (do not create definition file) - wsimport
-                                    const typeName = inputMessage.element.$type ?? inputMessage.element.$name;
-                                    const type = parsedWsdl.findDefinition(
-                                        inputMessage.element.$type ?? inputMessage.element.$name
-                                    );
-                                    inputDefinition = type
-                                        ? type
-                                        : createDefinition(parsedWsdl, mergedOptions, typeName, [typeName]);
+                                    inputType = getXmlType(inputMessage.element.$name, inputMessage.element.$type);
                                 } else if (inputMessage.parts) {
                                     Logger.debug(`Handling ${methodName}.input.parts`);
-                                    const type = parsedWsdl.findDefinition(paramName);
-                                    inputDefinition = type
-                                        ? type
-                                        : createDefinition(parsedWsdl, mergedOptions, paramName, [paramName]);
+                                    inputType = getXmlType(paramName);
                                 } else {
                                     Logger.debug(
                                         `Method '${serviceName}.${portName}.${methodName}' doesn't have any input defined`
@@ -228,22 +218,15 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                 }
                             }
 
-                            let outputDefinition: Definition = null; // default type, `{}` or `unknown` ?
+                            let outputType: XmlType = null; // default type
+
                             if (method.output) {
                                 Logger.debug(`Parsing Method ${methodName}.output`);
                                 const outputMessage = wsdl.definitions.messages[method.output.$name];
                                 if (outputMessage.element) {
-                                    // TODO: if `$type` not defined, inline type into function declaration (do not create definition file) - wsimport
-                                    const typeName = outputMessage.element.$type ?? outputMessage.element.$name;
-                                    const type = parsedWsdl.findDefinition(typeName);
-                                    outputDefinition = type
-                                        ? type
-                                        : createDefinition(parsedWsdl, mergedOptions, typeName, [typeName]);
+                                    outputType = getXmlType(outputMessage.element.$name, outputMessage.element.$type);
                                 } else {
-                                    const type = parsedWsdl.findDefinition(paramName);
-                                    outputDefinition = type
-                                        ? type
-                                        : createDefinition(parsedWsdl, mergedOptions, paramName, [paramName]);
+                                    outputType = getXmlType(paramName);
                                 }
                             }
 
@@ -258,8 +241,8 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                 paramName: reservedKeywords.includes(camelParamName)
                                     ? `${camelParamName}Param`
                                     : camelParamName,
-                                paramDefinition: inputDefinition, // TODO: Use string from generated definition files
-                                returnDefinition: outputDefinition, // TODO: Use string from generated definition files
+                                paramType: inputType,
+                                returnType: outputType,
                             };
                             portMethods.push(portMethod);
                             allMethods.push(portMethod);
@@ -470,7 +453,6 @@ function parseElement(element: Element, options: ParserOptions, optional?: boole
                 }
                 default: {
                     properties.push({
-                        kind: "SCHEMA",
                         name: propName,
                         sourceName: name,
                         type: type,
@@ -561,7 +543,6 @@ function parseElement(element: Element, options: ParserOptions, optional?: boole
 
             if (properties.length == 0) {
                 properties.push({
-                    kind: "SCHEMA",
                     name: "value",
                     sourceName: "value",
                     type: "string",
@@ -581,4 +562,17 @@ function parseElement(element: Element, options: ParserOptions, optional?: boole
     }
 
     return undefined;
+}
+
+function getXmlType(name: string, type?: string): XmlType {
+    if (type) {
+        const parts = type.split(":");
+        if (parts.length == 2) {
+            return { name: name, nameSpace: parts[0], type: parts[1] };
+        } else {
+            return { name: name, type: type };
+        }
+    }
+
+    return { name: name, type: "any" };
 }
