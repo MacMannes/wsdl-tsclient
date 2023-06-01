@@ -400,7 +400,7 @@ function parseElement(element, options, optional) {
             var minOccurs = element.$minOccurs;
             var maxOccurs = element.$maxOccurs;
             var isArray = maxOccurs && maxOccurs != "1";
-            var isOptional = optional || (!isArray && minOccurs == "0");
+            var isOptional = optional || minOccurs == "0";
             var type = element.$type;
             var nodeSoapType = getNodeSoapParsedType(type);
             var shouldAddImport = true;

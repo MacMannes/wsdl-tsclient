@@ -415,7 +415,7 @@ function parseElement(element: Element, options: ParserOptions, optional?: boole
             const minOccurs = (element as ElementElement).$minOccurs;
             const maxOccurs = (element as ElementElement).$maxOccurs;
             const isArray = maxOccurs && maxOccurs != "1";
-            const isOptional = optional || (!isArray && minOccurs == "0");
+            const isOptional = optional || minOccurs == "0";
             let type = (element as any).$type;
 
             const nodeSoapType: string | undefined = getNodeSoapParsedType(type);
