@@ -144,7 +144,8 @@ function generateDefinitionFile(project, definition, defDir, stack, generated, o
     }
     if (definition.attributes.length > 0) {
         var attributesName = "".concat(defName, "Attributes");
-        definitionProperties.push(createProperty("attributes", attributesName, false, undefined, false));
+        var optional = definition.attributes.map(function (it) { return it.use != "required"; }).every(function (val, i, arr) { return val === true; });
+        definitionProperties.push(createProperty("attributes", attributesName, false, undefined, optional));
         generateAttributesDefinition(defFile, definitionImports, attributesName, definition.attributes);
     }
     defFile.addImportDeclarations(definitionImports);

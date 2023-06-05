@@ -518,7 +518,7 @@ function parseElement(element, options, optional) {
             }
             if (properties.length == 0) {
                 properties.push({
-                    name: "value",
+                    name: "$value",
                     sourceName: "value",
                     type: "string",
                     isArray: false,
