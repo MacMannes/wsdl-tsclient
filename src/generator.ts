@@ -133,7 +133,8 @@ function generateDefinitionFile(
 
     if (definition.attributes.length > 0) {
         const attributesName = `${defName}Attributes`;
-        definitionProperties.push(createProperty("attributes", attributesName, false, undefined, false));
+        const optional = definition.attributes.map((it) => it.use != "required").every((val, i, arr) => val === true);
+        definitionProperties.push(createProperty("attributes", attributesName, false, undefined, optional));
         generateAttributesDefinition(defFile, definitionImports, attributesName, definition.attributes);
     }
 

@@ -543,7 +543,7 @@ function parseElement(element: Element, options: ParserOptions, optional?: boole
 
             if (properties.length == 0) {
                 properties.push({
-                    name: "value",
+                    name: "$value",
                     sourceName: "value",
                     type: "string",
                     isArray: false,
