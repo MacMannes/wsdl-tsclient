@@ -89,7 +89,7 @@ function generateDefinitionFile(
     stack: string[],
     generated: Definition[],
     options: GeneratorOptions,
-    allDefinitionNames?: string[],
+    generatedDefinitions?: Definition[],
     simpleTypeDefinitions?: { [name: string]: SimpleTypeDefinition }
 ): void {
     const defName = definition.name;
@@ -114,10 +114,14 @@ function generateDefinitionFile(
             }
         }
 
-        const type = prop.type;
+        let type = prop.type;
         if (prop.shouldAddImport) {
+            const lookUpDefinition = generatedDefinitions.find((it) => it.name == type);
+            if (lookUpDefinition && lookUpDefinition.properties.find((it) => it.name == "$value")) {
+                type = type + " | string";
+            }
             if (simpleTypeDefinitions) {
-                const simpleTypeDefinition: SimpleTypeDefinition | undefined = simpleTypeDefinitions[type];
+                const simpleTypeDefinition: SimpleTypeDefinition | undefined = simpleTypeDefinitions[prop.type];
                 if (simpleTypeDefinition) {
                     addSafeImport(definitionImports, `./${simpleTypeDefinitionsName}`, prop.type);
                 } else {
@@ -313,7 +317,7 @@ export async function generate(
             [definition.name],
             allDefinitions,
             mergedOptions,
-            parsedWsdl.definitions.map((it) => it.name),
+            parsedWsdl.definitions,
             parsedWsdl.simpleTypeDefinitions
         );
     }

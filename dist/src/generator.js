@@ -104,7 +104,7 @@ function createProperty(name, type, isArray, doc, optional) {
         type: isArray ? "Array<".concat(type, ">") : type,
     };
 }
-function generateDefinitionFile(project, definition, defDir, stack, generated, options, allDefinitionNames, simpleTypeDefinitions) {
+function generateDefinitionFile(project, definition, defDir, stack, generated, options, generatedDefinitions, simpleTypeDefinitions) {
     var defName = definition.name;
     var defFilePath = path_1.default.join(defDir, "".concat(defName, ".ts"));
     var defFile = project.createSourceFile(defFilePath, "", {
@@ -113,8 +113,7 @@ function generateDefinitionFile(project, definition, defDir, stack, generated, o
     generated.push(definition);
     var definitionImports = [];
     var definitionProperties = [];
-    for (var _i = 0, _a = definition.properties; _i < _a.length; _i++) {
-        var prop = _a[_i];
+    var _loop_1 = function (prop) {
         if (options.modelPropertyNaming) {
             switch (options.modelPropertyNaming) {
                 case _1.ModelPropertyNaming.camelCase:
@@ -127,8 +126,12 @@ function generateDefinitionFile(project, definition, defDir, stack, generated, o
         }
         var type = prop.type;
         if (prop.shouldAddImport) {
+            var lookUpDefinition = generatedDefinitions.find(function (it) { return it.name == type; });
+            if (lookUpDefinition && lookUpDefinition.properties.find(function (it) { return it.name == "$value"; })) {
+                type = type + " | string";
+            }
             if (simpleTypeDefinitions) {
-                var simpleTypeDefinition = simpleTypeDefinitions[type];
+                var simpleTypeDefinition = simpleTypeDefinitions[prop.type];
                 if (simpleTypeDefinition) {
                     addSafeImport(definitionImports, "./".concat(simpleTypeDefinitionsName), prop.type);
                 }
@@ -141,6 +144,10 @@ function generateDefinitionFile(project, definition, defDir, stack, generated, o
             }
         }
         definitionProperties.push(createProperty(prop.name, type, prop.isArray, prop.description, prop.isOptional));
+    };
+    for (var _i = 0, _a = definition.properties; _i < _a.length; _i++) {
+        var prop = _a[_i];
+        _loop_1(prop);
     }
     if (definition.attributes.length > 0) {
         var attributesName = "".concat(defName, "Attributes");
@@ -317,7 +324,7 @@ function generate(parsedWsdl, outDir, options) {
                     // Process all schema definitions
                     for (_m = 0, _o = parsedWsdl.definitions; _m < _o.length; _m++) {
                         definition = _o[_m];
-                        generateDefinitionFile(project, definition, defDir, [definition.name], allDefinitions, mergedOptions, parsedWsdl.definitions.map(function (it) { return it.name; }), parsedWsdl.simpleTypeDefinitions);
+                        generateDefinitionFile(project, definition, defDir, [definition.name], allDefinitions, mergedOptions, parsedWsdl.definitions, parsedWsdl.simpleTypeDefinitions);
                     }
                     simpleTypeDefinitionsFilePath = path_1.default.join(defDir, simpleTypeDefinitionsName + ".ts");
                     simpleTypeDefinitionsFile = project.createSourceFile(simpleTypeDefinitionsFilePath, "", {
