@@ -433,6 +433,8 @@ export async function generate(
         );
     }
 
+    indexFile.addStatements([`export * from "./definitions/${simpleTypeDefinitionsName}";`]);
+
     Logger.log(`Writing Index file: ${await path.resolve(path.join(outDir, "index"))}.ts`);
 
     indexFile.saveSync();

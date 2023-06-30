@@ -430,6 +430,7 @@ function generate(parsedWsdl, outDir, options) {
                             moduleSpecifier: "./ports/".concat(port.name),
                         }); }));
                     }
+                    indexFile.addStatements(["export * from \"./definitions/".concat(simpleTypeDefinitionsName, "\";")]);
                     _w = (_v = logger_1.Logger).log;
                     _x = "Writing Index file: ".concat;
                     return [4 /*yield*/, path_1.default.resolve(path_1.default.join(outDir, "index"))];
